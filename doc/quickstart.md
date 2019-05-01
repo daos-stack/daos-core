@@ -196,6 +196,10 @@ DAOS uses orterun(1) for scalable process launch. The list of storage nodes can 
 
 On each storage node, the DAOS server will use a storage path (specified either in the server configuration file or by --storage or -s cli options) that must be a directory in a tmpfs filesystem, for the time being. If not specified, it is assumed to be /mnt/daos. To configure the storage:
 
+
+Note:</br>
+A minimum size of 512M required
+
 ```
     mount -t tmpfs -o size=<bytes> tmpfs /mnt/daos
 ```
@@ -203,11 +207,18 @@ On each storage node, the DAOS server will use a storage path (specified either 
 To start the DAOS server, run:
 
 ```
-    orterun -np <num_servers> --hostfile ${hostfile} --enable-recovery --report-uri ${urifile} daos_server
+    orterun -np <num_servers> --hostfile ${hostfile} --enable-recovery --report-uri ${urifile} daos_server --socket_dir=/tmp
 ```
 
 By default, the DAOS server will use all the cores available on the storage server. You can limit the number of execution streams in the configuration file (cpus) or with the -c #cores\_to\_use cli option.
 Hostfile used here is the same as the ones used by Open MPI. See (https://www.open-mpi.org/faq/?category=running#mpirun-hostfile) for additional details.
+
+
+Note:</br>
+If running clients from a different shell:</br>
+`source ${daospath}/scons_local/utils/setup_local.sh # from ${daospath}`</br>
+`export CRT_PHY_ADDR_STR="ofi+sockets"`</br>
+`export OFI_INTERFACE=<if>`</br>
 
 ### DAOS Pool Management
 
