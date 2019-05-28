@@ -36,6 +36,7 @@
 #include <daos/rsvc.h>
 #include <daos_srv/daos_server.h>
 
+#include "mgmt.pb-c.h"
 #include "rpc.h"
 #include "srv_layout.h"
 
@@ -61,6 +62,8 @@ struct mgmt_join_out {
 	struct rsvc_hint	jo_hint;
 };
 int ds_mgmt_join_handler(struct mgmt_join_in *in, struct mgmt_join_out *out);
+int ds_mgmt_get_attach_info_handler(Mgmt__GetAttachInfoResp *resp);
+void ds_mgmt_hdlr_query(crt_rpc_t *rpc);
 
 /** srv_pool.c */
 void ds_mgmt_hdlr_pool_create(crt_rpc_t *rpc_req);
@@ -78,5 +81,6 @@ int ds_mgmt_tgt_map_update_pre_forward(crt_rpc_t *rpc, void *arg);
 void ds_mgmt_hdlr_tgt_map_update(crt_rpc_t *rpc);
 int ds_mgmt_tgt_map_update_aggregator(crt_rpc_t *source, crt_rpc_t *result,
 				      void *priv);
+void ds_mgmt_hdlr_query_server(crt_rpc_t *rpc);
 
 #endif /* __SRV_MGMT_INTERNAL_H__ */
