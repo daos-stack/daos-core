@@ -144,15 +144,17 @@ fi
 
 trap 'set +e; cleanup' EXIT
 
-CLUSH_ARGS=($CLUSH_ARGS)
-
 DAOS_BASE=${SL_PREFIX%/install}
 if ! clush "${CLUSH_ARGS[@]}" -B -l "${REMOTE_ACCT:-jenkins}" -R ssh -S \
     -w "$(IFS=','; echo "${nodes[*]}")" "set -ex
-# allow core files to be generated
 sudo bash -c \"set -ex
+# allow core files to be generated
 if [ \\\"\\\$(ulimit -c)\\\" != \\\"unlimited\\\" ]; then
     echo \\\"*  soft  core  unlimited\\\" >> /etc/security/limits.conf
+fi
+if [ \\\"\\\$(ulimit -l)\\\" != \\\"unlimited\\\" ]; then
+    echo \\\"*  hard  memlock  unlimited\\\" >> /etc/security/limits.conf
+    echo \\\"*  soft  memlock  unlimited\\\" >> /etc/security/limits.conf
 fi
 echo \\\"/var/tmp/core.%e.%t.%p\\\" > /proc/sys/kernel/core_pattern\"
 rm -f /var/tmp/core.*
@@ -267,7 +269,8 @@ else
     cd $DAOS_BASE
 fi
 
-export CRT_PHY_ADDR_STR=ofi+sockets
+# export CRT_PHY_ADDR_STR=ofi+sockets
+export CRT_PHY_ADDR_STR=\"ofi+verbs;ofi_rxm\"
 
 # Disable OFI_INTERFACE to allow launch.py to pick the fastest interface
 unset OFI_INTERFACE

@@ -20,7 +20,8 @@ BuildRequires: mercury-devel = %{mercury_version}
 BuildRequires: openpa-devel
 BuildRequires: libpsm2-devel
 BuildRequires: gcc-c++
-BuildRequires: openmpi3-devel
+BuildRequires: mpich-devel
+BuildRequires: environment-modules
 BuildRequires: hwloc-devel
 BuildRequires: libpsm2-devel
 %if (0%{?rhel} >= 7)

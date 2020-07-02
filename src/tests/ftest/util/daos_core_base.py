@@ -21,7 +21,8 @@
   Any reproduction of computer software, computer software documentation, or
   portions thereof marked with this legend must also reproduce the markings.
 """
-
+from distutils.spawn import find_executable
+import os
 from avocado.utils import process
 from apricot import TestWithServers
 from env_modules import load_mpi
@@ -65,17 +66,25 @@ class DaosCoreBase(TestWithServers):
         dmg = self.get_dmg_command()
         dmg_config_file = dmg.yaml.filename
 
-        cmd = "{} {} -n {} -x D_LOG_FILE={} {} -s {} -n {} -{} {}".format(
-            self.orterun, self.client_mca, num_clients,
-            get_log_file(self.client_log), self.daos_test,
-            num_replicas, dmg_config_file, subtest, args)
+        load_mpi("mpich")
+        path = os.path.dirname(find_executable("mpirun"))
+
+        cmd = "{}/mpirun -n {} -envlist D_LOG_FILE={} {} -s {} -{} {}".format(
+            path, num_clients,
+            get_log_file(self.client_log), self.daos_test, num_replicas,
+            subtest, args)
+
+        # cmd = "{} {} -n {} -x D_LOG_FILE={} {} -s {} -{} {}".format(
+        #    self.orterun, self.client_mca, num_clients,
+        #    get_log_file(self.client_log), self.daos_test, num_replicas,
+        #   subtest, args)
 
         env = {}
         env['CMOCKA_XML_FILE'] = "%g_results.xml"
         env['CMOCKA_MESSAGE_OUTPUT'] = "xml"
         env['POOL_SCM_SIZE'] = "{}".format(scm_size)
 
-        load_mpi("openmpi")
+        load_mpi("mpich")
         try:
             process.run(cmd, env=env)
         except process.CmdError as result:

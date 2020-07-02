@@ -268,7 +268,7 @@ class Orterun(JobManager):
 class Mpirun(JobManager):
     """A class for the mpirun job manager command."""
 
-    def __init__(self, job, subprocess=False, mpitype="openmpi"):
+    def __init__(self, job, subprocess=False, mpitype="mpich"):
         """Create a Mpirun object.
 
         Args:
