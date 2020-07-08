@@ -445,7 +445,8 @@ do_init:
 		crt_gdata.cg_inited = 1;
 
 		if (crt_is_service() && crt_gdata.cg_auto_swim_disable == 0) {
-			rc = crt_swim_init(CRT_DEFAULT_PROGRESS_CTX_IDX);
+			rc = crt_swim_init(opt ? opt->cio_swim_crt_idx :
+						 CRT_DEFAULT_PROGRESS_CTX_IDX);
 			if (rc) {
 				D_ERROR("crt_swim_init() failed rc: %d.\n", rc);
 				D_GOTO(cleanup, rc);

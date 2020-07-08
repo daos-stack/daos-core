@@ -46,6 +46,7 @@ char		*drpc_listener_socket_path = "/fake/listener.sock";
 /* DAOS internal globals - arbitrary values okay */
 uint32_t	dss_tgt_offload_xs_nr = 3;
 uint32_t	dss_tgt_nr = 4;
+uint32_t	dss_swim_idx = 0;
 uint32_t	dss_sys_xs_nr = 2;
 uint32_t	dss_instance_idx = 5;
 

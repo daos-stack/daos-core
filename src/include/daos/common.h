@@ -701,7 +701,8 @@ bool daos_hhash_link_delete(struct d_hlink *hlink);
 #define DAOS_NVME_SHMID_NONE	-1
 #define DAOS_NVME_MEM_PRIMARY	0
 
-crt_init_options_t *daos_crt_init_opt_get(bool server, int crt_nr);
+crt_init_options_t *daos_crt_init_opt_get(bool server, int crt_nr,
+					  int swim_idx);
 
 int crt_proc_daos_prop_t(crt_proc_t proc, daos_prop_t **data);
 int crt_proc_struct_daos_acl(crt_proc_t proc, struct daos_acl **data);

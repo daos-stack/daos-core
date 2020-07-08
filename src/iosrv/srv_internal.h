@@ -103,6 +103,8 @@ extern unsigned int	dss_tgt_offload_xs_nr;
 extern unsigned int	dss_sys_xs_nr;
 /** Flag of helper XS as a pool */
 extern bool		dss_helper_pool;
+/** Cart index for SWIM */
+extern unsigned int	dss_swim_idx;
 
 /* module.c */
 int dss_module_init(void);
@@ -121,6 +123,7 @@ void dss_dump_ABT_state(void);
 void dss_xstreams_open_barrier(void);
 struct dss_xstream *dss_get_xstream(int stream_id);
 int dss_xstream_cnt(void);
+unsigned int dss_ctx_get_swim_ctx();
 
 /* sched.c */
 void dss_sched_fini(struct dss_xstream *dx);
@@ -142,12 +145,13 @@ void ds_iv_fini(void);
 #define DSS_XS_SELF		(-1)
 /** Total number of XS */
 #define DSS_XS_NR_TOTAL						\
-	(dss_sys_xs_nr + dss_tgt_nr + dss_tgt_offload_xs_nr)
+	(dss_sys_xs_nr + dss_tgt_nr + dss_tgt_offload_xs_nr +	\
+	 (dss_swim_idx == 0 ? 0 : 1))
 /** Total number of cart contexts created */
 #define DSS_CTX_NR_TOTAL					\
 	(DAOS_TGT0_OFFSET + dss_tgt_nr +			\
 	 (dss_tgt_offload_xs_nr > dss_tgt_nr ? dss_tgt_nr :	\
-	  dss_tgt_offload_xs_nr))
+	  dss_tgt_offload_xs_nr) + (dss_swim_idx == 0 ? 0 : 1))
 /** main XS id of (vos) tgt_id */
 #define DSS_MAIN_XS_ID(tgt_id)						\
 	(dss_helper_pool ? ((tgt_id) + dss_sys_xs_nr) :			\

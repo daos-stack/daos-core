@@ -92,6 +92,8 @@ typedef struct crt_init_options {
 
 			/** Used with cio_use_credits to set credit limit */
 	int		cio_ep_credits;
+			/** swim crt index */
+	int		cio_swim_crt_idx;
 } crt_init_options_t;
 
 typedef int		crt_status_t;

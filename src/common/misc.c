@@ -561,12 +561,13 @@ daos_hhash_link_delete(struct d_hlink *hlink)
  *
  * \param server [IN]	true for server
  * \param ctx_nr [IN]	number of contexts
+ * \param swim_ctx [IN] swim ctx index	
  *
  * \return		the pointer to crt_init_options_t (NULL if not needed)
  */
 crt_init_options_t daos_crt_init_opt;
 crt_init_options_t *
-daos_crt_init_opt_get(bool server, int ctx_nr)
+daos_crt_init_opt_get(bool server, int ctx_nr, int swim_ctx)
 {
 	crt_phy_addr_t	addr_env;
 	bool		sep = false;
@@ -578,6 +579,7 @@ daos_crt_init_opt_get(bool server, int ctx_nr)
 	daos_crt_init_opt.cio_crt_timeout = 0;
 	daos_crt_init_opt.cio_sep_override = 1;
 
+	daos_crt_init_opt.cio_swim_crt_idx = swim_ctx;
 	/* for socket provider, force it to use regular EP rather than SEP for:
 	 * 1) now sockets provider cannot create more than 16 contexts for SEP
 	 * 2) some problems if SEP communicates with regular EP.
