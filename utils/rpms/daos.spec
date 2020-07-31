@@ -2,6 +2,11 @@
 %define server_svc_name daos_server.service
 %define agent_svc_name daos_agent.service
 
+%global __strip /bin/true
+%global _enable_debug_package 0
+%global debug_package %{nil}
+%global __os_install_post /usr/lib/rpm/brp-compress %{nil}
+
 %global mercury_version 2.0.0~rc1-1%{?dist}
 
 Name:          daos
@@ -184,17 +189,21 @@ This is the package needed to build software with the DAOS library.
 scons %{?_smp_mflags}      \
       --config=force       \
       --no-rpath           \
+      BUILD_TYPE=debug     \
       USE_INSTALLED=all    \
       CONF_DIR=%{conf_dir} \
       PREFIX=%{?buildroot}
 
 %install
+export DONT_STRIP=1
+
 scons %{?_smp_mflags}                 \
       --config=force                  \
       --no-rpath                      \
       --install-sandbox=%{?buildroot} \
       %{?buildroot}%{_prefix}         \
       %{?buildroot}%{conf_dir}        \
+      BUILD_TYPE=debug                \
       USE_INSTALLED=all               \
       CONF_DIR=%{conf_dir}            \
       PREFIX=%{_prefix}
@@ -304,14 +313,14 @@ getent passwd daos_server >/dev/null || useradd -M daos_server
 %{_libdir}/libioil.so
 %dir  %{_libdir}/python2.7/site-packages/pydaos
 %{_libdir}/python2.7/site-packages/pydaos/*.py
-%if (0%{?rhel} >= 7)
+%if (0%{?rhel} >= 7 && %_enable_debug_package != 0)
 %{_libdir}/python2.7/site-packages/pydaos/*.pyc
 %{_libdir}/python2.7/site-packages/pydaos/*.pyo
 %endif
 %{_libdir}/python2.7/site-packages/pydaos/pydaos_shim_27.so
 %dir  %{_libdir}/python2.7/site-packages/pydaos/raw
 %{_libdir}/python2.7/site-packages/pydaos/raw/*.py
-%if (0%{?rhel} >= 7)
+%if (0%{?rhel} >= 7 && %_enable_debug_package != 0)
 %{_libdir}/python2.7/site-packages/pydaos/raw/*.pyc
 %{_libdir}/python2.7/site-packages/pydaos/raw/*.pyo
 %endif
@@ -319,14 +328,14 @@ getent passwd daos_server >/dev/null || useradd -M daos_server
 %dir %{_libdir}/python3/site-packages
 %dir %{_libdir}/python3/site-packages/pydaos
 %{_libdir}/python3/site-packages/pydaos/*.py
-%if (0%{?rhel} >= 7)
+%if (0%{?rhel} >= 7 && %_enable_debug_package != 0)
 %{_libdir}/python3/site-packages/pydaos/*.pyc
 %{_libdir}/python3/site-packages/pydaos/*.pyo
 %endif
 %{_libdir}/python3/site-packages/pydaos/pydaos_shim_3.so
 %dir %{_libdir}/python3/site-packages/pydaos/raw
 %{_libdir}/python3/site-packages/pydaos/raw/*.py
-%if (0%{?rhel} >= 7)
+%if (0%{?rhel} >= 7 && %_enable_debug_package != 0)
 %{_libdir}/python3/site-packages/pydaos/raw/*.pyc
 %{_libdir}/python3/site-packages/pydaos/raw/*.pyo
 %endif

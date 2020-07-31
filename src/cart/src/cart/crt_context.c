@@ -25,6 +25,7 @@
  */
 #define D_LOGFAC	DD_FAC(rpc)
 
+#include <execinfo.h>
 #include "crt_internal.h"
 
 static void crt_epi_destroy(struct crt_ep_inflight *epi);
@@ -282,9 +283,37 @@ crt_rpc_complete(struct crt_rpc_priv *rpc_priv, int rc)
 		if (cbinfo.cci_rc == 0)
 			cbinfo.cci_rc = rpc_priv->crp_reply_hdr.cch_rc;
 
-		if (cbinfo.cci_rc != 0)
+		if (cbinfo.cci_rc != 0) {
 			RPC_ERROR(rpc_priv, "RPC failed; rc: %d\n",
 				  cbinfo.cci_rc);
+			if (cbinfo.cci_rc == -DER_INVAL) {
+				void *bt[128];
+				int bt_size, i;
+				char **symbols;
+
+				/* force log level to DEBUG */
+				rc = d_log_setmasks("DEBUG", -1);
+				if (rc == -1)
+					fprintf(stderr, "unable to force log mask to full DEBUG\n");
+
+				bt_size = backtrace(bt, 128);
+				if (bt_size >= 128)
+					fprintf(stderr, "backtrace may have been truncated\n");
+				if (bt_size <= 0)
+					fprintf(stderr, "backtrace() returned %d\n",
+						bt_size);
+
+				symbols = backtrace_symbols(bt, bt_size);
+				if (symbols != NULL) {
+					for (i = 0; i < bt_size; i++)
+						RPC_ERROR(rpc_priv, "%s\n",
+							  symbols[i]);
+					free(symbols);
+				} else {
+					fprintf(stderr, "backtrace_symbols() returned NULL\n");
+				}
+			}
+		}
 
 		RPC_TRACE(DB_TRACE, rpc_priv,
 			  "Invoking RPC callback (rank %d tag %d) rc: %d.\n",
