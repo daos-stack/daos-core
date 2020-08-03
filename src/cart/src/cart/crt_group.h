@@ -92,9 +92,6 @@ struct crt_grp_priv {
 	 */
 	struct crt_swim_membs	 gp_membs_swim;
 
-	/* CaRT context only for sending sub-grp create/destroy RPCs */
-	crt_context_t		 gp_ctx;
-
 	/* size (number of membs) of group */
 	uint32_t		 gp_size;
 	/*
@@ -109,8 +106,9 @@ struct crt_grp_priv {
 	d_rank_t		 gp_psr_rank;
 	/* PSR phy addr address in attached group */
 	crt_phy_addr_t		 gp_psr_phy_addr;
-	/* address lookup cache, only valid for primary group */
-	struct d_hash_table	 *gp_lookup_cache;
+
+	/* cache of mercury addresses, only valid for primary group */
+	struct d_hash_table	 gp_hg_addr_cache;
 
 	/* uri lookup cache, only valid for primary group */
 	struct d_hash_table	 gp_uri_lookup_cache;
@@ -232,7 +230,7 @@ struct crt_uri_item {
 
 /* lookup cache item for one target */
 struct crt_lookup_item {
-	/* link to crt_grp_priv::gp_lookup_cache[ctx_idx] */
+	/* link to crt_grp_priv::gp_hg_addr_cache */
 	d_list_t		 li_link;
 	/* point back to grp_priv */
 	struct crt_grp_priv	*li_grp_priv;
@@ -258,15 +256,14 @@ struct crt_grp_gdata {
 
 void crt_hdlr_uri_lookup(crt_rpc_t *rpc_req);
 int crt_grp_detach(crt_group_t *attached_grp);
-int crt_grp_lc_lookup(struct crt_grp_priv *grp_priv, int ctx_idx,
+int crt_grp_lc_lookup(struct crt_grp_priv *grp_priv,
 		      d_rank_t rank, uint32_t tag, crt_phy_addr_t *base_addr,
 		      hg_addr_t *hg_addr);
-int crt_grp_lc_uri_insert(struct crt_grp_priv *grp_priv, int ctx_idx,
+int crt_grp_uri_cache_insert(struct crt_grp_priv *grp_priv,
 			  d_rank_t rank, uint32_t tag, const char *uri);
-int crt_grp_lc_addr_insert(struct crt_grp_priv *grp_priv,
-			   struct crt_context *ctx_idx,
+int crt_grp_hg_cache_insert(struct crt_grp_priv *grp_priv,
 			   d_rank_t rank, uint32_t tag, hg_addr_t *hg_addr);
-int crt_grp_ctx_invalid(struct crt_context *ctx, bool locked);
+int crt_groups_hg_cache_purge(bool locked);
 struct crt_grp_priv *crt_grp_lookup_int_grpid(uint64_t int_grpid);
 struct crt_grp_priv *crt_grp_lookup_grpid(crt_group_id_t grp_id);
 int crt_validate_grpid(const crt_group_id_t grpid);
@@ -405,8 +402,6 @@ crt_rank_present(crt_group_t *grp, d_rank_t rank)
 
 bool
 crt_grp_id_identical(crt_group_id_t grp_id_1, crt_group_id_t grp_id_2);
-int crt_grp_lc_uri_insert_all(crt_group_t *grp, d_rank_t rank, int tag,
-			const char *uri);
 int crt_grp_config_psr_load(struct crt_grp_priv *grp_priv, d_rank_t psr_rank);
 int crt_grp_psr_reload(struct crt_grp_priv *grp_priv);
 

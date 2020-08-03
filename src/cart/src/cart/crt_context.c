@@ -428,11 +428,12 @@ crt_context_destroy(crt_context_t crt_ctx, int force)
 	}
 
 	ctx = crt_ctx;
-	rc = crt_grp_ctx_invalid(ctx, false /* locked */);
-	if (rc) {
-		D_ERROR("crt_grp_ctx_invalid failed, rc: %d.\n", rc);
-		if (!force)
-			D_GOTO(out, rc);
+
+	/* Cache invalidate requires context0 to destroy hg_addresses */
+	if (ctx->cc_idx == 0) {
+		rc = crt_groups_hg_cache_purge(false);
+		if (rc != 0)
+			D_ERROR("Failed to purge hg_cache; rc=%d\n", rc);
 	}
 
 	flags = force ? (CRT_EPI_ABORT_FORCE | CRT_EPI_ABORT_WAIT) : 0;
