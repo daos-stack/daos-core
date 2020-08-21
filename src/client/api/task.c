@@ -72,6 +72,8 @@ dc_task_create(tse_task_func_t func, tse_sched_t *sched, daos_event_t *ev,
 	tse_task_t	      *task;
 	int		       rc;
 
+	D_INFO("EJMM task.c: dc_task_create()");
+
 	if (sched == NULL) {
 		if (ev == NULL) {
 			rc = daos_event_priv_get(&ev);
@@ -116,26 +118,32 @@ dc_task_schedule(tse_task_t *task, bool instant)
 	daos_event_t *ev;
 	int	      rc;
 
+	D_INFO("EJMM task.c: dc_task_schedule()");
 	D_ASSERT(task_is_valid(task));
 
 	ev = task_ptr2args(task)->ta_ev;
 	if (ev) {
+		D_INFO("EJMM task.c: daos_event_launch()");
 		rc = daos_event_launch(ev);
 		if (rc) {
+			D_INFO("EJMM task.c: tse_task_complete()");
 			tse_task_complete(task, rc);
 			/* error has been reported to event */
 			D_GOTO(out, rc = 0);
 		}
 	}
 
+	D_INFO("EJMM task.c: tse_task_schedule()");
 	rc = tse_task_schedule(task, instant);
 	if (rc) {
+		D_INFO("EJMM task.c: tse_task_schedule() rc=%d", rc);
 		/** user is responsible for completing event with error */
 		D_GOTO(out, rc = 0); /* error has been reported to event */
 	}
 
 out:
 	if (daos_event_is_priv(ev)) {
+		D_INFO("EJMM task.c: daos_event_priv_wait()");
 		daos_event_priv_wait();
 		rc = ev->ev_error;
 	}
@@ -158,6 +166,7 @@ void *
 dc_task_get_args(tse_task_t *task)
 {
 	D_ASSERT(task_is_valid(task));
+	D_INFO("EJMM task.c: dc_task_get_args()");
 	return &task_ptr2args(task)->ta_u;
 }
 

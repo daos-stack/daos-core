@@ -264,6 +264,8 @@ crt_rpc_complete(struct crt_rpc_priv *rpc_priv, int rc)
 {
 	D_ASSERT(rpc_priv != NULL);
 
+	D_INFO("EJMM: crt_context.c crt_rpc_complete()");
+
 	if (rc == -DER_CANCELED)
 		rpc_priv->crp_state = RPC_STATE_CANCELED;
 	else if (rc == -DER_TIMEDOUT)
@@ -762,6 +764,7 @@ crt_context_timeout_check(struct crt_context *crt_ctx)
 	d_list_t			 timeout_list;
 	uint64_t			 ts_now;
 
+	D_INFO("EJMM crt_context.c: crt_context_timeout_check()");
 	D_ASSERT(crt_ctx != NULL);
 
 	D_INIT_LIST_HEAD(&timeout_list);
@@ -938,6 +941,7 @@ crt_context_req_untrack(struct crt_rpc_priv *rpc_priv)
 	struct crt_rpc_priv	*tmp_rpc;
 	int			 rc;
 
+	D_INFO("EJMM crt_context.c: crt_context_req_untrack()");
 	D_ASSERT(crt_ctx != NULL);
 
 	if (rpc_priv->crp_pub.cr_opc == CRT_OPC_URI_LOOKUP) {
@@ -1042,6 +1046,7 @@ crt_context_req_untrack(struct crt_rpc_priv *rpc_priv)
 		tmp_rpc->crp_state = RPC_STATE_INITED;
 		crt_context_req_untrack(tmp_rpc);
 		/* for error case here */
+		D_INFO("EJMM crt_context.c: while: crt_rpc_complete()");
 		crt_rpc_complete(tmp_rpc, rc);
 		RPC_DECREF(tmp_rpc);
 	}
@@ -1169,6 +1174,8 @@ crt_exec_progress_cb(struct crt_context *ctx)
 	int ctx_idx;
 	int rc;
 
+	D_INFO("EJMM crt_context.c: crt_exec_progress_cb()");
+
 	if (crt_plugin_gdata.cpg_inited == 0)
 		return;
 
@@ -1205,6 +1212,8 @@ crt_progress_cond(crt_context_t crt_ctx, int64_t timeout,
 	uint64_t		 now;
 	uint64_t		 end = 0;
 	int			 rc = 0;
+
+	D_INFO("EJMM crt_context.c: crt_progress_cond()");
 
 	/** validate input parameters */
 	if (unlikely(crt_ctx == CRT_CONTEXT_NULL || cond_cb == NULL)) {
@@ -1250,6 +1259,7 @@ crt_progress_cond(crt_context_t crt_ctx, int64_t timeout,
 	 * Call progress once before processing timeouts in case
 	 * any replies are pending in the queue
 	 */
+	D_INFO("EJMM crt_context.c: crt_hg_progress()");
 	rc = crt_hg_progress(&ctx->cc_hg_ctx, 0);
 	if (unlikely(rc && rc != -DER_TIMEDOUT)) {
 		D_ERROR("crt_hg_progress failed with %d\n", rc);
@@ -1258,9 +1268,12 @@ crt_progress_cond(crt_context_t crt_ctx, int64_t timeout,
 
 	/** loop until callback returns non-null value */
 	while ((rc = cond_cb(arg)) == 0) {
+		D_INFO("EJMM crt_context.c: crt_progress_cond() while loop");
+
 		crt_context_timeout_check(ctx);
 		crt_exec_progress_cb(ctx);
 
+		D_INFO("EJMM crt_context.c: crt_hg_progress() while");
 		rc = crt_hg_progress(&ctx->cc_hg_ctx, hg_timeout);
 		if (unlikely(rc && rc != -DER_TIMEDOUT)) {
 			D_ERROR("crt_hg_progress failed with %d\n", rc);
