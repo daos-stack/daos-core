@@ -1,3 +1,4 @@
+
 /**
  * (C) Copyright 2019-2020 Intel Corporation.
  *
@@ -110,60 +111,6 @@ dfs_obj_share(dfs_t *dfs, int flags, int rank, dfs_obj_t **obj)
 
 	D_FREE(ghdl.iov_buf);
 	MPI_Barrier(MPI_COMM_WORLD);
-}
-
-static void
-dfs_test_mount(void **state)
-{
-	test_arg_t		*arg = *state;
-	uuid_t			cuuid;
-	daos_cont_info_t	co_info;
-	daos_handle_t		coh;
-	dfs_t			*dfs;
-	int			rc;
-
-	if (arg->myrank != 0)
-		return;
-
-	/** create & open a non-posix container */
-	uuid_generate(cuuid);
-	rc = daos_cont_create(arg->pool.poh, cuuid, NULL, NULL);
-	assert_int_equal(rc, 0);
-	print_message("Created non-POSIX Container "DF_UUIDF"\n",
-		      DP_UUID(cuuid));
-	rc = daos_cont_open(arg->pool.poh, cuuid, DAOS_COO_RW,
-			    &coh, &co_info, NULL);
-	assert_int_equal(rc, 0);
-
-	/** try to mount DFS on it, should fail. */
-	rc = dfs_mount(arg->pool.poh, coh, O_RDWR, &dfs);
-	assert_int_equal(rc, EINVAL);
-
-	rc = daos_cont_close(coh, NULL);
-	assert_int_equal(rc, 0);
-	rc = daos_cont_destroy(arg->pool.poh, cuuid, 1, NULL);
-	assert_int_equal(rc, 0);
-	print_message("Destroyed non-POSIX Container "DF_UUIDF"\n",
-		      DP_UUID(cuuid));
-
-	/** create a DFS container with POSIX layout */
-	rc = dfs_cont_create(arg->pool.poh, cuuid, NULL, NULL, NULL);
-	assert_int_equal(rc, 0);
-	print_message("Created POSIX Container "DF_UUIDF"\n", DP_UUID(cuuid));
-	rc = daos_cont_open(arg->pool.poh, cuuid, DAOS_COO_RW,
-			    &coh, &co_info, NULL);
-	assert_int_equal(rc, 0);
-
-	rc = dfs_mount(arg->pool.poh, coh, O_RDWR, &dfs);
-	assert_int_equal(rc, 0);
-
-	rc = dfs_umount(dfs);
-	assert_int_equal(rc, 0);
-	rc = daos_cont_close(coh, NULL);
-	assert_int_equal(rc, 0);
-	rc = daos_cont_destroy(arg->pool.poh, cuuid, 1, NULL);
-	assert_int_equal(rc, 0);
-	print_message("Destroyed POSIX Container "DF_UUIDF"\n", DP_UUID(cuuid));
 }
 
 static int
@@ -502,6 +449,44 @@ check_one_success(int rc, int err, MPI_Comm comm)
 }
 
 static void
+dfs_test_syml(void **state)
+{
+	dfs_obj_t		*sym;
+	char			*filename = "syml_file";
+	char			*val = "SYMLINK VAL 1";
+	char			tmp_buf[64];
+	struct stat		stbuf;
+	daos_size_t		size = 0;
+	int			rc, op_rc;
+
+	op_rc = dfs_open(dfs_mt, NULL, filename, S_IFLNK | S_IWUSR | S_IRUSR,
+			 O_RDWR | O_CREAT | O_EXCL, 0, 0, val, &sym);
+	rc = check_one_success(op_rc, EEXIST, MPI_COMM_WORLD);
+	assert_int_equal(rc, 0);
+	if (op_rc != 0)
+		goto syml_stat;
+
+	rc = dfs_get_symlink_value(sym, NULL, &size);
+	assert_int_equal(rc, 0);
+	assert_int_equal(size, strlen(val) + 1);
+
+	rc = dfs_get_symlink_value(sym, tmp_buf, &size);
+	assert_int_equal(rc, 0);
+	assert_int_equal(size, strlen(val) + 1);
+	assert_string_equal(val, tmp_buf);
+
+	rc = dfs_release(sym);
+	assert_int_equal(rc, 0);
+
+syml_stat:
+	rc = dfs_stat(dfs_mt, NULL, filename, &stbuf);
+	assert_int_equal(rc, 0);
+	assert_int_equal(stbuf.st_size, strlen(val));
+
+	MPI_Barrier(MPI_COMM_WORLD);
+}
+
+static void
 dfs_test_cond(void **state)
 {
 	test_arg_t		*arg = *state;
@@ -578,44 +563,6 @@ dfs_test_cond(void **state)
 	if (rc)
 		print_error("Failed concurrent rename\n");
 	assert_int_equal(rc, 0);
-	MPI_Barrier(MPI_COMM_WORLD);
-}
-
-static void
-dfs_test_syml(void **state)
-{
-	dfs_obj_t		*sym;
-	char			*filename = "syml_file";
-	char			*val = "SYMLINK VAL 1";
-	char			tmp_buf[64];
-	struct stat		stbuf;
-	daos_size_t		size = 0;
-	int			rc, op_rc;
-
-	op_rc = dfs_open(dfs_mt, NULL, filename, S_IFLNK | S_IWUSR | S_IRUSR,
-			 O_RDWR | O_CREAT | O_EXCL, 0, 0, val, &sym);
-	rc = check_one_success(op_rc, EEXIST, MPI_COMM_WORLD);
-	assert_int_equal(rc, 0);
-	if (op_rc != 0)
-		goto syml_stat;
-
-	rc = dfs_get_symlink_value(sym, NULL, &size);
-	assert_int_equal(rc, 0);
-	assert_int_equal(size, strlen(val)+1);
-
-	rc = dfs_get_symlink_value(sym, tmp_buf, &size);
-	assert_int_equal(rc, 0);
-	assert_int_equal(size, strlen(val) + 1);
-	assert_string_equal(val, tmp_buf);
-
-	rc = dfs_release(sym);
-	assert_int_equal(rc, 0);
-
-syml_stat:
-	rc = dfs_stat(dfs_mt, NULL, filename, &stbuf);
-	assert_int_equal(rc, 0);
-	assert_int_equal(stbuf.st_size, strlen(val));
-
 	MPI_Barrier(MPI_COMM_WORLD);
 }
 
@@ -871,19 +818,17 @@ dfs_test_hole_mgmt(void **state)
 	D_FREE(rsgl.sg_iovs);
 }
 
-static const struct CMUnitTest dfs_tests[] = {
-	{ "DFS_TEST1: DFS mount / umount",
-	  dfs_test_mount, async_disable, test_case_teardown},
-	{ "DFS_TEST2: DFS short reads",
-	  dfs_test_short_read, async_disable, test_case_teardown},
-	{ "DFS_TEST3: multi-threads read shared file",
+static const struct CMUnitTest dfs_par_tests[] = {
+	{ "DFS_PAR_TEST1: DFS short reads",
+	  dfs_test_short_read,       async_disable, test_case_teardown},
+	{ "DFS_PAR_TEST2: multi-threads read shared file",
 	  dfs_test_read_shared_file, async_disable, test_case_teardown},
-	{ "DFS_TEST4: Conditional OPs",
-	  dfs_test_cond, async_disable, test_case_teardown},
-	{ "DFS_TEST5: Simple Symlinks",
-	  dfs_test_syml, async_disable, test_case_teardown},
-	{ "DFS_TEST6: DFS hole management",
-	  dfs_test_hole_mgmt, async_disable, test_case_teardown},
+	{ "DFS_PAR_TEST3: Simple Symlinks",
+	  dfs_test_syml,  async_disable, test_case_teardown},
+	{ "DFS_PAR_TEST4: Conditional OPs",
+	  dfs_test_cond,             async_disable, test_case_teardown},
+	{ "DFS_PAR_TEST5: DFS hole management",
+	  dfs_test_hole_mgmt,        async_disable, test_case_teardown},
 };
 
 static int
@@ -936,14 +881,15 @@ dfs_teardown(void **state)
 }
 
 int
-run_daos_fs_test(int rank, int size, int *sub_tests, int sub_tests_size)
+run_daos_fs_par_test(int rank, int size,
+			    int *sub_tests, int sub_tests_size)
 {
 	int rc = 0;
 
 	MPI_Barrier(MPI_COMM_WORLD);
-	rc = cmocka_run_group_tests_name("DAOS FileSystem (DFS) tests",
-					 dfs_tests, dfs_setup,
-					 dfs_teardown);
+	rc = cmocka_run_group_tests_name(
+		"DAOS FileSystem (DFS) parallel tests",
+		dfs_par_tests, dfs_setup, dfs_teardown);
 	MPI_Barrier(MPI_COMM_WORLD);
 	return rc;
 }
