@@ -35,7 +35,7 @@ except ImportError:
     # python 2.7
     import Queue as queue
 
-from apricot import TestWithServers, skipForTicket
+from apricot import TestWithServers
 from pydaos.raw import DaosContainer, DaosApiError
 from ior_utils import IorCommand
 from command_utils_base import CommandFailure
