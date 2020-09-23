@@ -70,14 +70,14 @@ test_run(d_rank_t my_rank)
 	}
 	DBG_PRINT("Contexts created %d\n", test_g.t_srv_ctx_num);
 
+	rc = crt_group_config_save(NULL, true);
+	D_ASSERTF(rc == 0,
+		  "crt_group_config_save() failed. rc: %d\n", rc);
+	DBG_PRINT("Group config file saved\n");
+
 	if (test_g.t_save_cfg && my_rank == 0) {
 		rc = crt_group_config_path_set(test_g.t_cfg_path);
 		D_ASSERTF(rc == 0, "crt_group_config_path_set failed %d\n", rc);
-
-		rc = crt_group_config_save(NULL, true);
-		D_ASSERTF(rc == 0,
-			  "crt_group_config_save() failed. rc: %d\n", rc);
-		DBG_PRINT("Group config file saved\n");
 	}
 
 
@@ -95,7 +95,7 @@ test_run(d_rank_t my_rank)
 	rc = sem_destroy(&test_g.t_token_to_proceed);
 	D_ASSERTF(rc == 0, "sem_destroy() failed.\n");
 
-	if (test_g.t_save_cfg && my_rank == 0) {
+	if (my_rank == 0) {
 		rc = crt_group_config_remove(NULL);
 		D_ASSERTF(rc == 0,
 			  "crt_group_config_remove() failed. rc: %d\n", rc);

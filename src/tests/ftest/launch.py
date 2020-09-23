@@ -71,7 +71,6 @@ YAML_KEYS = {
 }
 YAML_KEY_ORDER = ("test_servers", "test_clients", "bdev_list")
 
-
 def display(args, message):
     """Display the message if verbosity is set.
 
@@ -213,6 +212,7 @@ def set_test_environment(args):
     required_python_paths = [
         os.path.abspath("util/apricot"),
         os.path.abspath("util"),
+        os.path.abspath("cart/util"),
         os.path.join(base_dir, "lib64", python_version, "site-packages"),
     ]
 
@@ -250,6 +250,8 @@ def get_output(cmd, check=True):
 
     """
     print("Running {}".format(" ".join(cmd)))
+    print("Running in cwd(): {}".format(os.getcwd()))
+
     process = subprocess.Popen(
         cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     stdout, _ = process.communicate()
@@ -617,6 +619,89 @@ def replace_yaml_file(yaml_file, args, tmp_dir):
             key: getattr(args, value).split(",") if getattr(args, value) else []
             for key, value in YAML_KEYS.items()}
 
+        args_test_clients = []
+        if args.test_clients:
+          args_test_clients = args.test_clients.split(",")
+
+        # Get length of test-servers and test-clients, ensure they
+        # test-clients gets the carry-over from test-servers
+        found_test_servers_count = 0
+        if "test_servers" in yaml_find:
+          found_test_servers_count = len(yaml_find["test_servers"])
+
+         # Example case:
+         # Found values: {
+         #      'test_clients_1': ['boro-C'],
+         #      'test_clients_2': ['boro-D'], 
+         #      'test_clients_3': ['boro-E']
+         #      'test_servers': ['boro-A', 'boro-B'],
+         #    }
+         # New values:   {
+              # 'test_clients': [],
+              # 'test_servers': [
+              #     'wolf-103vm2',  'wolf-103vm3',  'wolf-103vm4',
+              #     'wolf-103vm5',  'wolf-103vm6',  'wolf-103vm7',
+              #     'wolf-103vm8', 'wolf-103vm9'
+              # ],
+              # 'test_clients_1': [],
+              # 'test_clients_2': [],
+              # 'test_clients_3': [],
+              # 'test_clients_4': [],
+              # 'test_clients_5': [],
+              # 'test_clients_6': [],
+              # 'bdev_list': []
+        # }
+
+        if "test_clients" not in new_values:
+          new_values["test_clients"] = []
+
+        new_values["test_clients"].extend(
+          new_values["test_servers"][found_test_servers_count:]
+        )
+
+        suffix_idx = 1
+
+        # In the YAML file, distribute list of test_clients supplied at the command-line
+        # across the boro-[ABC...] place-holder strings 
+        #
+        # Assume: test_clients_[1-9] settings in YAML are never assined more than one host
+
+        # Example:
+        # YAML:
+        #   test_clients_1
+        #     - boro-A
+        #   test_clients_1
+        #     - boro-B
+        #   test_clients_1
+        #     - boro-C
+        # Command-line arguments to launch.py:
+        #  -tc wolf-X,wolf-Y,wolf-Z
+        # Resulting YAML:
+        #   test_clients_1
+        #     - wolf-X
+        #   test_clients_1
+        #     - wolf-Y
+        #   test_clients_1
+        #     - wolf-Z
+        for tc1 in new_values["test_clients"]:
+
+          test_client_n = "test_clients_" + str(suffix_idx)
+
+          if yaml_find.get(test_client_n, False):
+            for tc2 in yaml_find[test_client_n]:
+
+                test_client_n_val = None
+                # -tc|--test-clients ommand line argument take precendence over
+                # -ts|--test-servers
+                if len(args_test_clients):
+                  test_client_n_val = args_test_clients.pop(0)
+                else:
+                  test_client_n_val = new_values["test_clients"].pop(0)
+
+                if test_client_n_val is not None:
+                  new_values[test_client_n].append(test_client_n_val)
+                  suffix_idx += 1
+
         # Assign replacement values for the test yaml entries to be replaced
         display(args, "Detecting replacements for {} in {}".format(
             yaml_keys, yaml_file))
@@ -639,8 +724,9 @@ def replace_yaml_file(yaml_file, args, tmp_dir):
                     # by a new test yaml list entry, e.g.
                     #   '- serverA' --> '- wolf-1'
                     value_format = "- {}"
-                    values_to_replace = [
-                        value_format.format(item) for item in yaml_find[key]]
+                    values_to_replace = []
+                    for item in yaml_find[key]:
+                      values_to_replace.append(item)
 
                 else:
                     # Individual bdev_list NVMe PCI addresses in the test yaml
@@ -654,11 +740,17 @@ def replace_yaml_file(yaml_file, args, tmp_dir):
 
                 # Add the next user-specified value as a replacement for the key
                 for value in values_to_replace:
+
+                    if (type(new_values[key]) == list):
+                      replacement_value = new_values[key].pop(0)
+                    else:
+                      replacement_value = new_values[key]
+
                     if value in replacements:
                         continue
                     try:
-                        replacements[value] = value_format.format(
-                            new_values[key].pop(0))
+                        # host value could be a list or string
+                        replacements[value] = replacement_value
                     except IndexError:
                         replacements[value] = None
                     display(
@@ -834,6 +926,25 @@ def find_yaml_hosts(test_yaml):
         get_yaml_data(test_yaml),
         [YAML_KEYS["test_servers"], YAML_KEYS["test_clients"]])
 
+def flatten(l):
+    """Flatten an arbitrarily nested list to a list of scalars
+
+    Args:
+        l: a nested list of depth n
+
+    Returns:
+        result: a unique list of hosts specified in the test's yaml file
+
+    """
+    result = []
+    if type(l) == list:
+      for el in l:
+          if hasattr(el, "__iter__") and not isinstance(el, basestring):
+              result.extend(flatten(el))
+          else:
+              result.append(el)
+      return result
+
 
 def get_hosts_from_yaml(test_yaml, args):
     """Extract the list of hosts from the test yaml file.
@@ -853,10 +964,13 @@ def get_hosts_from_yaml(test_yaml, args):
     if args.include_localhost:
         host_set.add(socket.gethostname().split(".")[0])
     found_client_key = False
+
+
     for key, value in find_yaml_hosts(test_yaml).items():
-        host_set.update(value)
-        if key in YAML_KEYS["test_clients"]:
-            found_client_key = True
+        for host in flatten(value):
+          host_set.update([host.split(".")[0]])
+          if key in YAML_KEYS["test_clients"]:
+              found_client_key = True
 
     # Include this host as a client if no clients are specified
     if not found_client_key:
@@ -901,8 +1015,16 @@ def archive_logs(avocado_logs_dir, test_yaml, args):
 
     # Copy any log files written to the DAOS_TEST_LOG_DIR directory
     logs_dir = os.environ.get("DAOS_TEST_LOG_DIR", DEFAULT_DAOS_TEST_LOG_DIR)
-    archive_files(destination, host_list, "{}/*.log".format(logs_dir))
 
+    # Caution: the glob expression "_output.log" must match the
+    #   --output-filename specified in # cart_utils.py:get_env()
+
+    # Create tar archives of orterun log dirs to prevent name collisions (e.g.,
+    # we'll have many # hundreds of tests with output files named "stdout")
+    archive_files(destination, host_list, "{}/*_output.orterun_log".format(logs_dir), do_tar=True)
+
+    # Plain files need not be tar'd, then can simply be scp'd to the archive destination
+    archive_files(destination, host_list, "{}/*.{{tar*,log*}}".format(logs_dir))
 
 def archive_config_files(avocado_logs_dir):
     """Copy all of the configuration files to the avocado results directory.
@@ -925,19 +1047,23 @@ def archive_config_files(avocado_logs_dir):
     archive_files(
         destination, host_list, "{}/*_*_*.yaml".format(configs_dir))
 
-
-def archive_files(destination, host_list, source_files):
+def archive_files(destination, host_list, source_files, do_tar=False):
     """Archive all of the remote files to the destination directory.
 
     Args:
         destination (str): path to which to archive files
         host_list (list): hosts from which to archive files
         source_files (str): remote files to archive
+        do_tar (bool): tar directory before scp-ing to host
+          (Useful for copying, e.g., files from orterun --output-filename option
+          to the avocado results directory.)
+
     """
     this_host = socket.gethostname().split(".")[0]
 
     # Create the destination directory
-    get_output(["mkdir", destination])
+    if not os.path.exists(destination):
+      get_output(["mkdir", destination])
 
     # Display available disk space prior to copy.  Allow commands to fail w/o
     # exiting this program.  Any disk space issues preventing the creation of a
@@ -945,30 +1071,38 @@ def archive_files(destination, host_list, source_files):
     print("Current disk space usage of {}".format(destination))
     print(get_output(["df", "-h", destination]))
 
+    # If we're tar-ing, then we're our source files ought to be a directory, hence
+    # the -d option to ls here.
+    ls_cmd = "ls"
+    if do_tar:
+      ls_cmd = "ls -d"
+
     # Copy any source files that exist on the remote hosts and remove them from
     # the remote host if the copy is successful.  Attempt all of the commands
     # and report status at the end of the loop.  Include a listing of the file
     # related to any failed command.
     commands = [
         "set -eu",
+        "set +x",
         "rc=0",
         "copied=()",
-        "for file in $(ls {})".format(source_files),
+        "for file in $({} {})".format(ls_cmd, source_files),
         "do ls -sh $file",
         "/lib/cart/TESTING/util/cart_logtest.py $file",
         "if scp $file {}:{}/${{file##*/}}-$(hostname -s)".format(
             this_host, destination),
-        "then copied+=($file)",
-        "if ! sudo rm -fr $file",
-        "then ((rc++))",
-        "ls -al $file",
-        "fi",
+          "then copied+=($file)",
+          "if ! sudo rm -fr $file",
+            "then ((rc++))",
+            "ls -al $file",
+          "fi",
         "fi",
         "done",
         "echo Copied ${copied[@]:-no files}",
         "exit $rc",
     ]
-    spawn_commands(host_list, "; ".join(commands), 900)
+  
+    spawn_commands(host_list, "; ".join(commands), timeout=900)
 
 
 def rename_logs(avocado_logs_dir, test_file):
