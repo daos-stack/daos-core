@@ -57,7 +57,8 @@ String get_daos_packages() {
 String get_daos_packages(String distro) {
     String pkgs
     if (env.TEST_RPMS == 'true') {
-        pkgs = "daos{,-{client,tests,server}}"
+        pkgs = "daos{,-{client,server," +
+               "tests{,-{common,ior,fio,mpiio,hdf5-vol,macsio,soak}}}}"
     } else {
         pkgs = "daos{,-client}"
     }
@@ -217,17 +218,7 @@ String functional_packages() {
 
 String functional_packages(String distro) {
     String daos_pkgs = get_daos_packages(distro)
-    String pkgs = " openmpi3 hwloc ndctl fio " +
-                  "ior-hpc-daos-0 " +
-                  "romio-tests-cart-4-daos-0 " +
-                  "testmpio-cart-4-daos-0 " +
-                  "mpi4py-tests-cart-4-daos-0 " +
-                  "hdf5-mpich2-tests-daos-0 " +
-                  "hdf5-openmpi3-tests-daos-0 " +
-                  "hdf5-vol-daos-mpich2-tests-daos-0 " +
-                  "hdf5-vol-daos-openmpi3-tests-daos-0 " +
-                  "MACSio-mpich2-daos-0 " +
-                  "MACSio-openmpi3-daos-0"
+    String pkgs = ""
     if (distro == "leap15") {
         if (quickbuild()) {
             pkgs += " spdk-tools"

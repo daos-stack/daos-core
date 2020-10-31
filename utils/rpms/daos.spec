@@ -2,6 +2,36 @@
 %define server_svc_name daos_server.service
 %define agent_svc_name daos_agent.service
 
+%define create_file_list() ( \
+  touch %1; \
+  for file in %2; \
+  do \
+    echo ${file#"%3"} >> %1; \
+    file_name_w_ext=${file##*/}; \
+    file_name=${file_name_w_ext%.*}; \
+    utils=$(grep -l -R -E "(from|import) ${file_name}" %5 %3%4/ftest/util/*); \
+    for util_file in ${utils}; \
+    do \
+      echo ${util_file#"%3"} >> %1; \
+      util_name_file_w_ext=${util_file##*/}; \
+      util_name=${util_name_file_w_ext%.*}; \
+      regex="(from|import) (${util_name}|${file_name})"; \
+      search="%5 --exclude-dir=util %3%4/ftest/*"; \
+      ftests=$(grep -l -R -E "${regex}" ${search}); \
+      for ftest_file in ${ftests}; \
+      do \
+        for other_file in $(find ${ftest_file%%.*}.* | sort); \
+        do \
+          echo "${other_file#%3}" >> %1; \
+        done; \
+      done; \
+    done; \
+  done; \
+  cat %1 | sort -u > %{1}_unique; \
+  mv %{1}_unique %1; \
+  cat %1 \
+)
+
 %if (0%{?suse_version} >= 1500)
 # until we get an updated mercury build on 15.2
 %global mercury_version 2.0.0~rc1-1.suse.lp151
@@ -11,7 +41,7 @@
 
 Name:          daos
 Version:       1.1.1
-Release:       5%{?relval}%{?dist}
+Release:       6%{?relval}%{?dist}
 Summary:       DAOS Storage Engine
 
 License:       Apache
@@ -19,7 +49,7 @@ URL:           https//github.com/daos-stack/daos
 Source0:       %{name}-%{version}.tar.gz
 
 BuildRequires: scons >= 2.4
-BuildRequires: libfabric-devel
+BuildRequires: libfabric-devel >= 1.11
 BuildRequires: boost-devel
 BuildRequires: mercury-devel = %{mercury_version}
 BuildRequires: openpa-devel
@@ -166,7 +196,6 @@ Requires: %{name}-client = %{version}-%{release}
 Requires: python-pathlib
 Requires: python-distro
 Requires: python2-tabulate
-Requires: fio
 Requires: lbzip2
 %if (0%{?suse_version} >= 1315)
 Requires: libpsm_infinipath1
@@ -174,6 +203,73 @@ Requires: libpsm_infinipath1
 
 %description tests
 This is the package needed to run the DAOS test suite
+
+%package tests-common
+Summary: The DAOS test suite common files
+Requires: %{name}-tests = %{version}-%{release}
+Requires: mpich
+Requires: openmpi3
+Requires: ndctl
+
+%description tests-common
+This is the package provides the common files for the DAOS test suites
+
+%package tests-ior
+Summary: The DAOS test suite for ior tests
+Requires: %{name}-tests-common = %{version}-%{release}
+Requires: ior-hpc-daos-0
+Requires: hdf5-mpich2-daos-0
+Requires: hdf5-openmpi3-daos-0
+
+%description tests-ior
+This is the package needed to run the DAOS test suite with ior
+
+%package tests-fio
+Summary: The DAOS test suite for fio tests
+Requires: %{name}-tests-common = %{version}-%{release}
+Requires: fio
+
+%description tests-fio
+This is the package needed to run the DAOS test suite with fio
+
+%package tests-mpiio
+Summary: The DAOS test suite for mpiio tests
+Requires: %{name}-tests-ior = %{version}-%{release}
+Requires: romio-tests-cart-4-daos-0
+Requires: testmpio-cart-4-daos-0
+Requires: mpi4py-tests-cart-4-daos-0
+Requires: hdf5-mpich2-tests-daos-0
+Requires: hdf5-openmpi3-tests-daos-0
+
+%description tests-mpiio
+This is the package needed to run the DAOS test suite with mpiio
+
+%package tests-hdf5-vol
+Summary: The DAOS test suite for hdf5 vol tests
+Requires: %{name}-tests-common = %{version}-%{release}
+Requires: hdf5-vol-daos-mpich2-tests-daos-0
+Requires: hdf5-vol-daos-openmpi3-tests-daos-0
+
+%description tests-hdf5-vol
+This is the package needed to run the DAOS test suite with hdf5 vol
+
+%package tests-macsio
+Summary: The DAOS test suite for macsio tests
+Requires: %{name}-tests-mpiio = %{version}-%{release}
+Requires: MACSio-mpich2-daos-0
+Requires: MACSio-openmpi3-daos-0
+
+%description tests-macsio
+This is the package needed to run the DAOS test suite with  macsio
+
+%package tests-soak
+Summary: The DAOS soak test suite
+Requires: %{name}-tests-ior = %{version}-%{release}
+Requires: %{name}-tests-fio = %{version}-%{release}
+Requires: slurm
+
+%description tests-soak
+This is the package needed to run the DAOS soak test suite
 
 %package devel
 # Leap 15 doesn't seem to be creating dependencies as richly as EL7
@@ -232,6 +328,67 @@ install -m 644 utils/systemd/%{server_svc_name} %{?buildroot}/%{_unitdir}
 install -m 644 utils/systemd/%{agent_svc_name} %{?buildroot}/%{_unitdir}
 mkdir -p %{?buildroot}/%{conf_dir}/certs/clients
 mv %{?buildroot}/%{_prefix}/etc/bash_completion.d %{?buildroot}/%{_sysconfdir}
+
+output="daos-tests-base.files"
+echo "%{_prefix}/lib/daos/TESTING/ftest/cart/cart_logtest.py" > ${output}
+echo "%{_prefix}/lib/daos/TESTING/ftest/get_remote_files.sh" > ${output}
+
+output="daos-tests-ior.files"
+ftest_path=%{?_prefix}/lib/daos/TESTING
+files=(%{?buildroot}%{?_prefix}/lib/daos/TESTING/ftest/util/ior_utils.py \
+  %{?buildroot}%{?_prefix}/lib/daos/TESTING/ftest/util/nvme_utils.py)
+exclude="--exclude-dir=soak"
+%create_file_list  ${output} ${files} %{?buildroot} ${ftest_path} ${exclude}
+
+output="daos-tests-fio.files"
+exclude="${exclude} --exclude=ior_utils.py --exclude=ior_test_base.py"
+files=%{?buildroot}%{?_prefix}/lib/daos/TESTING/ftest/util/fio_utils.py
+%create_file_list ${output} ${files} %{?buildroot} ${ftest_path} ${exclude}
+
+output="daos-tests-mpiio.files"
+exclude="${exclude} --exclude=fio_utils.py"
+files=%{?buildroot}%{?_prefix}/lib/daos/TESTING/ftest/util/mpio_utils.py
+%create_file_list ${output} ${files} %{?buildroot} ${ftest_path} ${exclude}
+
+output="daos-tests-hdf5-vol.files"
+exclude="${exclude} --exclude=mpio_utils.py"
+files=%{?buildroot}%{?_prefix}/lib/daos/TESTING/ftest/util/hdf5_vol_utils.py
+%create_file_list ${output} ${files} %{?buildroot} ${ftest_path} ${exclude}
+
+output="daos-tests-macsio.files"
+exclude="${exclude} --exclude=hdf5_vol_utils.py"
+files=%{?buildroot}%{?_prefix}/lib/daos/TESTING/ftest/util/macsio_utils.py
+%create_file_list ${output} ${files} %{?buildroot} ${ftest_path} ${exclude}
+
+output="daos-tests-soak.files"
+touch ${output}
+for file in $(find %{?buildroot}${ftest_path}/ftest/soak -type f | sort)
+do
+  echo ${file#%{?buildroot}} >> ${output}
+done
+cat ${output}
+
+output="daos-tests-common.files"
+touch ${output}
+for file in $(find %{?buildroot}${ftest_path}/ftest -type f | sort)
+do
+  echo ${file#%{?buildroot}} >> ${output}
+done
+for name in base ior fio mpiio hdf5-vol macsio soak
+do
+  grep -Fvxf daos-tests-${name}.files ${output} > ${output}_new
+  mv ${output}{_new,}
+done
+cat ${output}
+
+%if (0%{?rhel} >= 7)
+for name in base common ior fio mpiio hdf5-vol macsio soak
+do
+  file="daos-tests-${name}.files"
+  cat ${file} | sed -ne 's/\(.*\)\.py/\1.pyc\n\1.pyo/p' >> ${file}
+  sort ${file}
+done
+%endif
 
 %pre server
 getent group daos_admins >/dev/null || groupadd -r daos_admins
@@ -375,9 +532,10 @@ getent passwd daos_agent >/dev/null || useradd -s /sbin/nologin -r daos_agent
 %{_mandir}/man8/daos.8*
 %{_mandir}/man8/dmg.8*
 
-%files tests
+%files tests -f daos-tests-base.files
 %dir %{_prefix}/lib/daos
-%{_prefix}/lib/daos/TESTING
+%{_prefix}/lib/daos/TESTING/scripts
+%{_prefix}/lib/daos/TESTING/tests
 %{_bindir}/hello_drpc
 %{_bindir}/*_test*
 %exclude %{_bindir}/self_test
@@ -390,9 +548,23 @@ getent passwd daos_agent >/dev/null || useradd -s /sbin/nologin -r daos_agent
 %{_bindir}/daos_run_io_conf
 %{_bindir}/crt_launch
 %{_prefix}/etc/fault-inject-cart.yaml
+
+%files tests-common -f daos-tests-common.files
 # For avocado tests
 %{_prefix}/lib/daos/.build_vars.json
 %{_prefix}/lib/daos/.build_vars.sh
+
+%files tests-ior -f daos-tests-ior.files
+
+%files tests-fio -f daos-tests-fio.files
+
+%files tests-mpiio -f daos-tests-mpiio.files
+
+%files tests-hdf5-vol -f daos-tests-hdf5-vol.files
+
+%files tests-macsio -f daos-tests-macsio.files
+
+%files tests-soak -f daos-tests-soak.files
 
 %files devel
 %{_includedir}/*
@@ -400,6 +572,10 @@ getent passwd daos_agent >/dev/null || useradd -s /sbin/nologin -r daos_agent
 %{_libdir}/*.a
 
 %changelog
+* Wed Oct 28 2020 Phillip Henderson <phillip.henderson@intel.com> 1.1.1-6
+- Separated the daos-tests package into multiple packages based upon external
+  package requirements.
+
 * Wed Oct 28 2020 Brian J. Murrell <brian.murrell@intel.com> - 1.1.1-5
 - Use %%autosetup
 - Only use systemd_requires if it exists

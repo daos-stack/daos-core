@@ -21,19 +21,35 @@ License as provided in Contract No. B609815.
 Any reproduction of computer software, computer software documentation, or
 portions thereof marked with this legend must also reproduce the markings.
 """
-
-import os
-
 from dfuse_test_base import DfuseTestBase
 from command_utils_base import EnvironmentVariables, CommandFailure
+from hdf5_vol_utils import Hdf5VolCommand
 
 
-class VolTestBase(DfuseTestBase):
+class Hdf5VolTestBase(DfuseTestBase):
     # pylint: disable=too-few-public-methods,too-many-ancestors
     """Runs HDF5 vol test suites.
 
     :avocado: recursive
     """
+
+    def __init__(self, *args, **kwargs):
+        """Initialize a Hdf5VolTestBase object."""
+        super(Hdf5VolTestBase, self).__init__(*args, **kwargs)
+        self.hdf5_vol_cmd = None
+
+    def setUp(self):
+        """Set up each test case."""
+        # obtain separate logs
+        self.update_log_file_names()
+
+        # Start the servers and agents
+        super(Hdf5VolTestBase, self).setUp()
+
+        # Get the parameters for the HDF5 VOL command
+        hdf5_vol_repo = self.params.get("hdf5_vol_repo")
+        self.hdf5_vol_cmd = Hdf5VolCommand(hdf5_vol_repo)
+        self.hdf5_vol_cmd.get_params(self)
 
     def run_test(self):
         """Run the HDF5 VOL testsuites.
@@ -43,10 +59,7 @@ class VolTestBase(DfuseTestBase):
 
         """
         # initialize test specific variables
-        test_repo = self.params.get("daos_vol_repo")
         plugin_path = self.params.get("plugin_path")
-        # test_list = self.params.get("daos_vol_tests", default=[])
-        testname = self.params.get("testname")
         client_processes = self.params.get("client_processes")
 
         # create pool, container and dfuse mount
@@ -60,7 +73,7 @@ class VolTestBase(DfuseTestBase):
         self.start_dfuse(self.hostlist_clients, self.pool, self.container)
 
         # Assign the test to run
-        self.job_manager.job = os.path.join(test_repo, testname)
+        self.job_manager.job = self.hdf5_vol_cmd
 
         env = EnvironmentVariables()
         env["DAOS_POOL"] = "{}".format(self.pool.uuid)
@@ -73,7 +86,7 @@ class VolTestBase(DfuseTestBase):
         self.job_manager.assign_environment(env, True)
         self.job_manager.working_dir.value = self.dfuse.mount_dir.value
 
-        # run VOL Command
+        # Run the HDF5 test with the VOL connector
         try:
             self.job_manager.run()
         except CommandFailure as _error:
