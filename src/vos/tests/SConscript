@@ -22,6 +22,7 @@ def scons():
                     'vts_mvcc.c']
     vos_tests = daos_build.program(vtsenv, 'vos_tests', vos_test_src,
                                    LIBS=libraries)
+
     denv.AppendUnique(CPPPATH=["../../common/tests"])
     evt_ctl = daos_build.program(denv, 'evt_ctl', ['evt_ctl.c', utest_utils],
                                  LIBS=libraries)
