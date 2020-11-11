@@ -1,0 +1,102 @@
+# For most projects, this workflow file will not need changing; you simply need
+# to commit it to your repository.
+#
+# You may wish to alter this file to override the set of languages analyzed,
+# or to provide custom queries or build logic.
+name: "CodeQL"
+
+on:
+  push:
+    branches: [master, release/**]
+  pull_request:
+    # The branches below must be a subset of the branches above
+    branches: [master, release/**]
+  schedule:
+    - cron: '0 6 * * 6'
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-20.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # Override automatic language detection by changing the below list
+        # Supported options are ['csharp', 'cpp', 'go', 'java', 'javascript', 'python']
+        language: ['cpp', 'python', 'go', 'java']
+        # Learn more...
+        # https://docs.github.com/en/github/finding-security-vulnerabilities-and-errors-in-your-code/configuring-code-scanning#overriding-automatic-language-detection
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        # We must fetch at least the immediate parents so that if this is
+        # a pull request then we can checkout the head.
+        fetch-depth: 2
+
+    # If this run was triggered by a pull request event, then checkout
+    # the head of the pull request instead of the merge commit.
+    - run: git checkout HEAD^2
+      if: ${{ github.event_name == 'pull_request' }}
+
+    # Initializes the CodeQL tools for scanning.
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v1
+      with:
+        languages: ${{ matrix.language }}
+        # Override the default behavior so that the action doesn't attempt
+        # to auto-install Python dependencies -- they are installed by the
+        # O/S package manager
+        setup-python-dependencies: false
+        # If you wish to specify custom queries, you can do so here or in a config file.
+        # By default, queries listed here will override any specified in a config file.
+        # Prefix the list here with "+" to use these queries and those in the config file.
+        # queries: ./path/to/local/query, your-org/your-repo/queries@main
+    # Packages DAOS needs to build
+    - if: matrix.language == 'cpp' || matrix.language == 'java'
+      name: Install dependencies
+      run: |
+        dpkg -l \*jdk\*
+        sudo apt-get update
+        sudo apt-get remove -y adoptopenjdk-8-hotspot adoptopenjdk-11-hotspot
+        sudo apt-get install -y scons autoconf bash clang cmake curl doxygen flex gcc git graphviz libaio-dev libboost-dev libcmocka0 libcmocka-dev libcunit1-dev libevent-dev libibverbs-dev libiscsi-dev libltdl-dev libnuma-dev librdmacm-dev libreadline6-dev libssl-dev libtool-bin libyaml-dev locales make meson nasm ninja-build pandoc patch pylint python-dev python3-dev scons sg3-utils uuid-dev yasm valgrind libhwloc-dev man fuse3 libfuse3-dev openjdk-8-jdk maven libopenmpi-dev patchelf libjson-c-dev liblz4-dev
+        sudo apt-get install -y software-properties-common
+        sudo apt-get install -y libsafec-dev libipmctl-dev ndctl ipmctl golang-go
+
+    # Autobuild attempts to build any compiled languages  (C/C++, C#, or Java).
+    # If this step fails, then you should remove it and run the build manually (see below)
+    # This could only possibly work if:
+    #  (a) we could provide args to it's scons command, and/or
+    #  (b) provide it all of the required component/dependencies
+    #- name: Autobuild
+    #  uses: github/codeql-action/autobuild@v1
+
+    # ℹ️ Command-line programs to run using the OS shell.
+    # 📚 https://git.io/JvXDl
+
+    # ✏️ If the Autobuild fails above, remove it and uncomment the following three lines
+    #    and modify them (or add more) to build your code if your project
+    #    uses a compiled language
+
+    - if: matrix.language == 'cpp' || matrix.language == 'java'
+      name: Build DAOS
+      run: |
+        git submodule init && git submodule update
+        scons --build-deps=yes install PREFIX=install
+        rc=$?
+        if [ "${{ matrix.language }}" != "java" ]; then
+            exit $rc
+        fi
+        # use Java 8 instead of default Java 11
+        sudo update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java
+        echo $JAVA_HOME
+        export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+        # set maven mirror
+        mkdir -p ~/.m2
+        echo -e "<settings>\n <mirrors>\n  <mirror>\n   <id>google-maven-central</id>\n   <name>GCS Maven Central mirror</name>\n   <url>https://maven-central.storage-download.googleapis.com/maven2/</url>\n   <mirrorOf>central</mirrorOf>\n  </mirror>\n </mirrors>\n</settings>" > ~/.m2/settings.xml
+        cd src/client/java && mvn clean install -DskipITs -Ddaos.install.path=$PWD/../../../install
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v1
