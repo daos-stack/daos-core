@@ -418,6 +418,7 @@ if [ $(lsb_release -s -i) = CentOS ]; then
 else
     process_cores=\"\"
 fi
+
 # now run it!
 if ! ./launch.py -cris\${process_cores}a -th ${LOGS_THRESHOLD} \\
                  -ts ${TEST_NODES} ${NVME_ARG} ${TEST_TAG_ARR[*]}; then
