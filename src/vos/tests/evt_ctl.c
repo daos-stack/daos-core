@@ -43,6 +43,7 @@
 
 #include <daos_srv/evtree.h>
 #include <daos_srv/bio.h>
+#include <daos_srv/vos.h>
 #include <daos/tests_lib.h>
 #include <daos_pool.h>
 #include <utest_common.h>
@@ -2390,6 +2391,10 @@ main(int argc, char **argv)
 	if (rc != 0)
 		return rc;
 
+	rc = vos_init();
+	if (rc != 0)
+		goto out_0;
+
 	/* Capture test_name and pmem args if any */
 	start_idx = 0;
 	test_name = "evtree default test suite name";
@@ -2419,7 +2424,7 @@ main(int argc, char **argv)
 	}
 	if (rc != 0) {
 		perror("Evtree test couldn't create pool");
-		return rc;
+		goto out;
 	}
 
 	ts_root = utest_utx2root(ts_utx);
@@ -2446,6 +2451,8 @@ main(int argc, char **argv)
 	/* Execute the sequence of tests */
 	rc = run_cmd_line_test(test_name, argv, argc);
  out:
+	vos_fini();
+ out_0:
 	daos_debug_fini();
 	rc += utest_utx_destroy(ts_utx);
 	return rc;
