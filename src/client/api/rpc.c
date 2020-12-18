@@ -24,6 +24,8 @@
 
 #include <daos/rpc.h>
 #include <daos/event.h>
+#include <gurt/telemetry_common.h>
+#include <gurt/telemetry_producer.h>
 
 static void
 daos_rpc_cb(const struct crt_cb_info *cb_info)
@@ -41,25 +43,39 @@ daos_rpc_cb(const struct crt_cb_info *cb_info)
 int
 daos_rpc_complete(crt_rpc_t *rpc, tse_task_t *task)
 {
-	struct crt_cb_info cbinfo;
+	static struct d_tm_node_t	*rpc_complete;
+	struct crt_cb_info		cbinfo;
 
 	cbinfo.cci_arg = task;
 	cbinfo.cci_rc  = 0;
 	daos_rpc_cb(&cbinfo);
 	crt_req_decref(rpc);
+
+	d_tm_increment_counter(&rpc_complete, "daos/rpc", "complete", NULL);
+
 	return 0;
 }
 
 int
 daos_rpc_send(crt_rpc_t *rpc, tse_task_t *task)
 {
-	int rc;
+	static struct d_tm_node_t	*rpc_send;
+	//char				buf[16];
+	int				rc;
 
 	rc = crt_req_send(rpc, daos_rpc_cb, task);
 	if (rc != 0) {
 		/** task will be completed in CB above */
 		rc = 0;
 	}
+
+	d_tm_increment_counter(&rpc_send, "daos/rpc/send", "total", NULL);
+
+	// This is relatively slow and sub-optimal to convert the opcode into
+	// a string.  It's ok for a demo, but not ideal.
+	//snprintf(buf, sizeof(buf), "0x%x", rpc->cr_opc);
+	//d_tm_increment_counter(NULL, "daos/rpc/send/opcode", buf, "count",
+	//		       NULL);
 
 	return rc;
 }

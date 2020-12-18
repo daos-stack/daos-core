@@ -39,6 +39,8 @@
 #include "obj_ec.h"
 #include "obj_rpc.h"
 #include "obj_internal.h"
+#include <gurt/telemetry_common.h>
+#include <gurt/telemetry_producer.h>
 
 /* Server side minor epoch is 16 bits, and starts from 1, that allows at most
  * '2 ^ 16 - 1' sub modifications.
@@ -2680,8 +2682,17 @@ out:
 int
 dc_tx_attach(daos_handle_t th, enum obj_rpc_opc opc, tse_task_t *task)
 {
-	struct dc_tx	*tx;
-	int		 rc;
+	static struct d_tm_node_t	*update;
+	static struct d_tm_node_t	*punch;
+	static struct d_tm_node_t	*punch_dkey;
+	static struct d_tm_node_t	*punch_akey;
+	static struct d_tm_node_t	*fetch;
+	static struct d_tm_node_t	*query_key;
+	static struct d_tm_node_t	*recx_rpc_enumerate;
+	static struct d_tm_node_t	*akey_rpc_enumerate;
+	static struct d_tm_node_t	*dkey_rpc_enumerate;
+	struct dc_tx			*tx;
+	int				rc;
 
 	rc = dc_tx_check(th, obj_is_modification_opc(opc) ? true : false, &tx);
 	if (rc != 0)
@@ -2690,6 +2701,8 @@ dc_tx_attach(daos_handle_t th, enum obj_rpc_opc opc, tse_task_t *task)
 	switch (opc) {
 	case DAOS_OBJ_RPC_UPDATE: {
 		daos_obj_update_t	*up = dc_task_get_args(task);
+
+		d_tm_increment_counter(&update, "daos/rpc/update/count", NULL);
 
 		if (up->flags & (DAOS_COND_DKEY_INSERT |
 				 DAOS_COND_DKEY_UPDATE |
@@ -2709,6 +2722,8 @@ dc_tx_attach(daos_handle_t th, enum obj_rpc_opc opc, tse_task_t *task)
 	case DAOS_OBJ_RPC_PUNCH: {
 		daos_obj_punch_t	*pu = dc_task_get_args(task);
 
+		d_tm_increment_counter(&punch, "daos/rpc/punch/count", NULL);
+
 		D_ASSERTF(!(pu->flags & DAOS_COND_MASK),
 			  "Unexpected cond flag %lx for punch obj\n",
 			  pu->flags);
@@ -2718,6 +2733,9 @@ dc_tx_attach(daos_handle_t th, enum obj_rpc_opc opc, tse_task_t *task)
 	}
 	case DAOS_OBJ_RPC_PUNCH_DKEYS: {
 		daos_obj_punch_t	*pu = dc_task_get_args(task);
+
+		d_tm_increment_counter(&punch_dkey, "daos/rpc/punch_dkey/count",
+				       NULL);
 
 		if (pu->flags & DAOS_COND_PUNCH) {
 			D_MUTEX_UNLOCK(&tx->tx_lock);
@@ -2732,6 +2750,9 @@ dc_tx_attach(daos_handle_t th, enum obj_rpc_opc opc, tse_task_t *task)
 	}
 	case DAOS_OBJ_RPC_PUNCH_AKEYS: {
 		daos_obj_punch_t	*pu = dc_task_get_args(task);
+
+		d_tm_increment_counter(&punch_akey, "daos/rpc/punch_akey/count",
+				       NULL);
 
 		if (pu->flags & DAOS_COND_PUNCH) {
 			D_MUTEX_UNLOCK(&tx->tx_lock);
@@ -2748,6 +2769,8 @@ dc_tx_attach(daos_handle_t th, enum obj_rpc_opc opc, tse_task_t *task)
 	case DAOS_OBJ_RPC_FETCH: {
 		daos_obj_fetch_t	*fe = dc_task_get_args(task);
 
+		d_tm_increment_counter(&fetch, "daos/rpc/fetch/count", NULL);
+
 		rc = dc_tx_add_read(tx, opc, fe->oh, fe->flags, fe->dkey,
 				    fe->nr, fe->nr != 1 ? fe->iods :
 				    (void *)&fe->iods[0].iod_name);
@@ -2757,6 +2780,9 @@ dc_tx_attach(daos_handle_t th, enum obj_rpc_opc opc, tse_task_t *task)
 		daos_obj_query_key_t	*qu = dc_task_get_args(task);
 		daos_key_t		*dkey;
 		uint32_t		 nr;
+
+		d_tm_increment_counter(&query_key, "daos/rpc/query_key/count",
+				       NULL);
 
 		if (qu->flags & DAOS_GET_DKEY) {
 			dkey = NULL;
@@ -2775,17 +2801,29 @@ dc_tx_attach(daos_handle_t th, enum obj_rpc_opc opc, tse_task_t *task)
 	case DAOS_OBJ_RECX_RPC_ENUMERATE: {
 		daos_obj_list_recx_t	*lr = dc_task_get_args(task);
 
+		d_tm_increment_counter(&recx_rpc_enumerate,
+				       "daos/rpc/recx_rpc_enumerate/count",
+				       NULL);
+
 		rc = dc_tx_add_read(tx, opc, lr->oh, 0, lr->dkey, 1, lr->akey);
 		break;
 	}
 	case DAOS_OBJ_AKEY_RPC_ENUMERATE: {
 		daos_obj_list_akey_t	*la = dc_task_get_args(task);
 
+		d_tm_increment_counter(&akey_rpc_enumerate,
+				       "daos/rpc/akey_rpc_enumerate/count",
+				       NULL);
+
 		rc = dc_tx_add_read(tx, opc, la->oh, 0, la->dkey, 0, NULL);
 		break;
 	}
 	case DAOS_OBJ_DKEY_RPC_ENUMERATE: {
 		daos_obj_list_dkey_t	*ld = dc_task_get_args(task);
+
+		d_tm_increment_counter(&dkey_rpc_enumerate,
+				       "daos/rpc/dkey_rpc_enumerate/count",
+				       NULL);
 
 		rc = dc_tx_add_read(tx, opc, ld->oh, 0, NULL, 0, NULL);
 		break;
