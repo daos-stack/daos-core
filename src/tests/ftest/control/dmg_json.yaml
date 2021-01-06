@@ -1,0 +1,15 @@
+hosts:
+  test_servers:
+    - server-A
+    - server-B
+timeout: 120
+server_config:
+  name: daos_server
+dmg:
+  json: True
+pool:
+  name: daos_server
+  control_method: dmg
+expected:
+  scm_size: 1G
+  ranks: [0,1]

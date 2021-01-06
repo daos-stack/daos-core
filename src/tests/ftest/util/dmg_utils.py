@@ -633,19 +633,39 @@ class DmgCommand(DmgCommandBase):
 
         """
         self._get_result(("pool", "list"))
-
-        # Populate a dictionary with svc replicas for each pool UUID key listed
-        # Sample dmg pool list output:
-        #    Pool UUID                            Svc Replicas
-        #    ---------                            ------------
-        #    43bf2fe8-cb92-46ec-b9e9-9b056725092a 0
-        #    98736dfe-cb92-12cd-de45-9b09875092cd 1
         data = {}
-        match = re.findall(
-            r"(?:([0-9a-fA-F][0-9a-fA-F-]+)\s+([0-9][0-9,-]*))",
-            self.result.stdout)
-        for info in match:
-            data[info[0]] = get_numeric_list(info[1])
+        if self.json.value:
+            # {
+            #     "response": {
+            #         "Status": 0,
+            #         "Pools": [
+            #             {
+            #                 "UUID": "fc98d70e",
+            #                 "Svcreps": [
+            #                     0
+            #                 ]
+            #             }
+            #         ]
+            #     },
+            #     "error": null,
+            #     "status": 0
+            # }
+            output = json.loads(self.result.stdout)
+            for item in output["response"]["Pools"]:
+                data[item["UUID"]] = ",".join(str(svc)
+                                              for svc in item["Svcreps"])
+        else:
+            # Populate a dictionary with svc replicas for each pool UUID key listed
+            # Sample dmg pool list output:
+            #    Pool UUID                            Svc Replicas
+            #    ---------                            ------------
+            #    43bf2fe8-cb92-46ec-b9e9-9b056725092a 0
+            #    98736dfe-cb92-12cd-de45-9b09875092cd 1
+            match = re.findall(
+                r"(?:([0-9a-fA-F][0-9a-fA-F-]+)\s+([0-9][0-9,-]*))",
+                self.result.stdout)
+            for info in match:
+                data[info[0]] = get_numeric_list(info[1])
         return data
 
     def pool_set_prop(self, pool, name, value):
@@ -844,6 +864,38 @@ class DmgCommand(DmgCommandBase):
 
         self.log.info("system_query data: %s", str(data))
         return data
+
+    def system_leader_query(self):
+        """Query system to display leader information.
+
+        Args:
+            None
+
+        Returns:
+            CmdResult: Object that contains exit status, stdout, and other
+                information
+
+        Raises:
+            CommandFailure: If the dmg system leader-query command fails
+
+        """
+        return self._get_result(("system", "leader-query"))
+
+    def system_list_pools(self):
+        """List all system pools.
+
+        Args:
+            None
+
+        Returns:
+            CmdResult: Object that contains exit status, stdout, and other
+                information
+
+        Raises:
+            CommandFailure: if the dmg system list-pools command fails
+
+        """
+        return self._get_result(("system", "list-pools"))
 
     def system_start(self):
         """Start the system.
