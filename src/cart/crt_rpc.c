@@ -1666,11 +1666,99 @@ crt_req_dst_tag_get(crt_rpc_t *rpc, uint32_t *tag)
 		D_GOTO(out, rc = -DER_INVAL);
 	}
 
-
 	rpc_priv = container_of(rpc, struct crt_rpc_priv, crp_pub);
-
 	*tag = rpc_priv->crp_req_hdr.cch_dst_tag;
-
 out:
 	return rc;
 }
+
+static void
+uri_cache_invalidate(struct crt_context	*ctx, struct crt_rpc_priv *rpc_priv)
+{
+	d_list_t		*rlink;
+	crt_endpoint_t	        *tgt_ep = &rpc_priv->crp_pub.cr_ep;
+	struct crt_grp_priv	*grp_priv = crt_grp_pub2priv(tgt_ep->ep_grp);
+	struct crt_grp_priv	*my_grp_priv;
+	struct crt_uri_item	*ui;
+	d_rank_t		rank;
+	struct crt_lookup_item	*li;
+	uint32_t		tag;
+
+	tgt_ep = &rpc_priv->crp_pub.cr_ep;
+	rank = tgt_ep->ep_rank;
+	grp_priv = crt_grp_pub2priv(tgt_ep->ep_grp);
+
+	/* invalidate all none 0 tags gp_lookup_cache */
+	my_grp_priv = grp_priv;
+	if (grp_priv->gp_primary == 0) {
+		my_grp_priv = grp_priv->gp_priv_prim;
+
+		/* convert subgroup rank to primary group rank */
+		rank = crt_grp_priv_get_primary_rank(grp_priv, rank);
+	}
+
+
+	D_RWLOCK_WRLOCK(&my_grp_priv->gp_rwlock);
+	rlink = d_hash_rec_find(&my_grp_priv->gp_lookup_cache[ctx->cc_idx],
+				(void *)&rank, sizeof(rank));
+	if (rlink == NULL) {
+		D_GOTO(out, 0);
+	}
+	li = crt_li_link2ptr(rlink);
+	D_ASSERT(li->li_grp_priv == my_grp_priv);
+	D_ASSERT(li->li_rank == rank);
+	D_ASSERT(li->li_initialized != 0);
+	for (tag = 1; tag < CRT_SRV_CONTEXT_NUM; tag++) {
+		if (li->li_tag_addr[tag]) {
+			crt_hg_addr_free(&ctx->cc_hg_ctx, li->li_tag_addr[tag]);
+			li->li_tag_addr[tag] = NULL;
+		}
+	}
+	d_hash_rec_decref(&my_grp_priv->gp_lookup_cache[ctx->cc_idx], rlink);
+
+	/* invalidate all none 0 tags in gp_uri_lookup_cache */
+	rlink = d_hash_rec_find(&my_grp_priv->gp_uri_lookup_cache,
+				(void *)&rank, sizeof(rank));
+	if (rlink == NULL) {
+		D_GOTO(out, 0);
+	}
+	ui = container_of(rlink, struct crt_uri_item, ui_link);
+	for (tag = 1; tag < CRT_SRV_CONTEXT_NUM; tag++) {
+		if (ui->ui_uri[tag] != NULL) {
+			D_FREE(ui->ui_uri[tag]);
+			ui->ui_uri[tag] = NULL;
+		}
+	}
+	d_hash_rec_decref(&my_grp_priv->gp_uri_lookup_cache, rlink);
+	D_RWLOCK_UNLOCK(&my_grp_priv->gp_rwlock);
+out:
+	;
+}
+
+int
+crt_req_retry(struct crt_rpc_priv *rpc_priv)
+{
+	struct crt_context	*ctx;
+	int			rc = 0;
+
+	D_RWLOCK_RDLOCK(&crt_gdata.cg_rwlock);
+
+	d_list_for_each_entry(ctx, &crt_gdata.cg_ctx_list, cc_link) {
+		uri_cache_invalidate(ctx, rpc_priv);
+	}
+	D_RWLOCK_UNLOCK(&crt_gdata.cg_rwlock);
+	if (rc != 0) {
+		D_GOTO(out, rc);
+	}
+	rpc_priv->crp_state = RPC_STATE_INITED;
+	rc = crt_req_send_internal(rpc_priv);
+	if (rc != 0) {
+		D_ERROR("crt_req_retry() failed, "
+			"rc %d, opc: %#x\n",
+			rc, rpc_priv->crp_pub.cr_opc);
+		crt_context_req_untrack(rpc_priv);
+	}
+out:
+	return rc;
+}
+

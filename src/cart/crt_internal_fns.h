@@ -55,6 +55,7 @@ void crt_rpc_complete(struct crt_rpc_priv *rpc_priv, int rc);
 int crt_req_timeout_track(struct crt_rpc_priv *rpc_priv);
 void crt_req_timeout_untrack(struct crt_rpc_priv *rpc_priv);
 void crt_req_force_timeout(struct crt_rpc_priv *rpc_priv);
+int crt_req_retry(struct crt_rpc_priv *rpc_priv);
 
 /** crt_hlct.c */
 uint64_t crt_hlct_get(void);

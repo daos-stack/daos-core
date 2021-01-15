@@ -983,6 +983,7 @@ crt_hg_req_send_cb(const struct hg_cb_info *hg_cbinfo)
 	hg_return_t		hg_ret = HG_SUCCESS;
 	crt_rpc_state_t		state;
 	int			rc = 0;
+	int			retry_rc;
 
 	D_ASSERT(rpc_priv != NULL);
 	D_ASSERT(hg_cbinfo->type == HG_CB_FORWARD);
@@ -1055,6 +1056,17 @@ crt_hg_req_send_cb(const struct hg_cb_info *hg_cbinfo)
 	crt_cbinfo.cci_arg = rpc_priv->crp_arg;
 	crt_cbinfo.cci_rc = rc;
 
+	if (rc != 0 && rpc_pub->cr_ep.ep_tag != 0 &&
+	    !rpc_priv->crp_rpc_retry) {
+		rpc_priv->crp_rpc_retry = true;
+		retry_rc = crt_req_retry(rpc_priv);
+		if (retry_rc == 0) {
+			D_GOTO(out1, hg_ret);
+		}
+
+	}
+	rpc_priv->crp_rpc_retry = false;
+
 	if (crt_cbinfo.cci_rc != 0)
 		RPC_ERROR(rpc_priv, "RPC failed; rc: " DF_RC "\n",
 			  DP_RC(crt_cbinfo.cci_rc));
@@ -1074,7 +1086,7 @@ out:
 
 	/* corresponding to the refcount taken in crt_rpc_priv_init(). */
 	RPC_DECREF(rpc_priv);
-
+out1:
 	return hg_ret;
 }
 

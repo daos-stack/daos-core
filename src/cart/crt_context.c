@@ -284,16 +284,33 @@ crt_context_register_rpc_task(crt_context_t ctx, crt_rpc_task_t process_cb,
 void
 crt_rpc_complete(struct crt_rpc_priv *rpc_priv, int rc)
 {
+	int	rply_rc;
+	int	retry_rc;
+	bool	retransmit = false;
+
 	D_ASSERT(rpc_priv != NULL);
 
 	if (rc == -DER_CANCELED)
 		rpc_priv->crp_state = RPC_STATE_CANCELED;
-	else if (rc == -DER_TIMEDOUT)
+	else if (rc == -DER_TIMEDOUT) {
 		rpc_priv->crp_state = RPC_STATE_TIMEOUT;
-	else if (rc == -DER_UNREACH)
+		retransmit = true;
+	} else if (rc == -DER_UNREACH) {
 		rpc_priv->crp_state = RPC_STATE_FWD_UNREACH;
-	else
+		retransmit = true;
+	} else
 		rpc_priv->crp_state = RPC_STATE_COMPLETED;
+
+	rply_rc = rpc_priv->crp_reply_hdr.cch_rc;
+	if ((retransmit || rply_rc != 0) &&
+	    rpc_priv->crp_pub.cr_ep.ep_tag != 0 && !rpc_priv->crp_rpc_retry) {
+		rpc_priv->crp_rpc_retry = true;
+		retry_rc = crt_req_retry(rpc_priv);
+		if (retry_rc == 0) {
+			D_GOTO(out, rply_rc);
+		}
+	}
+	rpc_priv->crp_rpc_retry = false;
 
 	if (rpc_priv->crp_complete_cb != NULL) {
 		struct crt_cb_info	cbinfo;
@@ -319,6 +336,8 @@ crt_rpc_complete(struct crt_rpc_priv *rpc_priv, int rc)
 	}
 
 	RPC_DECREF(rpc_priv);
+out:
+	;
 }
 
 /* Flag bits definition for crt_ctx_epi_abort */
