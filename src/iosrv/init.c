@@ -18,6 +18,7 @@
 #include <getopt.h>
 #include <errno.h>
 #include <execinfo.h>
+#include <ftw.h>
 
 #include <daos/btree_class.h>
 #include <daos/common.h>
@@ -655,10 +656,57 @@ exit_debug_init:
 	return rc;
 }
 
+static int
+cleanup_cb(const char *path, const struct stat *sb, int flag,
+	   struct FTW *ftwbuf)
+{
+	int rc;
+
+	if (ftwbuf->level == 0)
+		return 0;
+
+	if (flag == FTW_DP || flag == FTW_D)
+		rc = rmdir(path);
+	else
+		rc = unlink(path);
+	if (rc)
+		D_ERROR("failed to remove %s\n", path);
+	return rc;
+}
+
+static void
+shared_memory_file_cleanup(void)
+{
+	int rc;
+
+	if (dss_nvme_shm_id != DAOS_NVME_SHMID_NONE) {
+		/* unlink spdk shared memory files for this stream */
+		char path[NAME_MAX];
+
+		/* remove shared memory dir created by each daos io searver
+		 * currently in /var/run/dpdk
+		 */
+		snprintf(path, NAME_MAX, "/var/run/dpdk/spdk%d",
+			 dss_nvme_shm_id);
+		rc = nftw(path, cleanup_cb, 1, FTW_D);
+		if (rc == 0)
+			rc = rmdir(path);
+
+		if (rc) {
+			D_ERROR("Failed to remove shared memory dir: %s "
+				""DF_RC"\n", path, DP_RC(rc));
+		} else {
+			D_INFO("Removed shared memory dir: %s "DF_RC"\n",
+				path, DP_RC(rc));
+		}
+	}
+}
+
 static void
 server_fini(bool force)
 {
 	D_INFO("Service is shutting down\n");
+	shared_memory_file_cleanup();
 	dss_module_cleanup_all();
 	D_INFO("dss_module_cleanup_all() done\n");
 	drpc_fini();
