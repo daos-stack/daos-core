@@ -321,7 +321,7 @@ class CommandWithParameters(ObjectWithParameters):
         params = []
         for name in self.get_str_param_names():
             value = str(getattr(self, name))
-            if value != "":
+            if value != "" and value != "True" and value != "False":
                 params.append(value)
 
         # Append the path to the command and prepend it with any other
@@ -401,6 +401,18 @@ class YamlParameters(ObjectWithParameters):
 
         """
         yaml_data = self.get_yaml_data()
+        self.write_yaml(yaml_data)
+
+    def write_yaml(self, yaml_data):
+        """Write yaml to file from provided yaml data.
+
+        Args:
+            yaml_data (str): dictionary containing yaml file values.
+
+        Raises:
+            CommandFailure: if there is an error creating the yaml file
+
+        """
         self.log.info("Writing yaml configuration file %s", self.filename)
         try:
             with open(self.filename, 'w') as write_file:

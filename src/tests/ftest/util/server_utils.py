@@ -10,7 +10,8 @@ import socket
 import time
 
 from command_utils_base import \
-    CommandFailure, FormattedParameter, YamlParameters, CommandWithParameters
+    CommandFailure, FormattedParameter, YamlParameters, CommandWithParameters, \
+    BasicParameter
 from command_utils import YamlCommand, CommandWithSubCommand, SubprocessManager
 from general_utils import pcmd, get_log_file, human_to_bytes, bytes_to_human
 from dmg_utils import DmgCommand
@@ -26,6 +27,7 @@ class DaosServerCommand(YamlCommand):
     NORMAL_PATTERN = "DAOS I/O server.*started"
     FORMAT_PATTERN = "(SCM format required)(?!;)"
     REFORMAT_PATTERN = "Metadata format required"
+    DISCOVER_PATTERN = "DAOS Control Server (pid.*) listening on.*"
 
     def __init__(self, path="", yaml_cfg=None, timeout=30):
         """Create a daos_server command object.
@@ -64,6 +66,13 @@ class DaosServerCommand(YamlCommand):
         # Include the daos_io_server command launched by the daos_server
         # command.
         self._exe_names.append("daos_io_server")
+
+        # Discover mode
+        self.generated_yaml = None
+        self.discover_mode = BasicParameter(False, False)
+        self.discover_pmem = BasicParameter(None)
+        self.discover_nvme = BasicParameter(None)
+        self.discover_net = BasicParameter(None)
 
     def get_sub_command_class(self):
         # pylint: disable=redefined-variable-type
@@ -107,13 +116,16 @@ class DaosServerCommand(YamlCommand):
         """Update the pattern used to determine if the daos_server started.
 
         Args:
-            mode (str): operation mode for the 'daos_server start' command
+            mode (str): operation mode for the 'daos_server start' command.
+                Defaults to detecting NORMAL mode if pattern is not idetified.
             host_qty (int): number of hosts issuing 'daos_server start'
         """
         if mode == "format":
             self.pattern = self.FORMAT_PATTERN
         elif mode == "reformat":
             self.pattern = self.REFORMAT_PATTERN
+        elif mode == "discover":
+            self.pattern = self.DISCOVER_PATTERN
         else:
             self.pattern = self.NORMAL_PATTERN
         self.pattern_count = host_qty * len(self.yaml.server_params)
@@ -318,7 +330,7 @@ class DaosServerManager(SubprocessManager):
         """Prepare to start daos_server.
 
         Args:
-            storage (bool, optional): whether or not to prepare dspm/nvme
+            storage (bool, optional): whether or not to prepare dcpm/nvme
                 storage. Defaults to True.
         """
         self.log.info(
@@ -468,17 +480,31 @@ class DaosServerManager(SubprocessManager):
                 dev_type = "dcpm"
             raise ServerFailed("Error preparing {} storage".format(dev_type))
 
-    def detect_format_ready(self, reformat=False):
-        """Detect when all the daos_servers are ready for storage format."""
-        f_type = "format" if not reformat else "reformat"
-        self.log.info("<SERVER> Waiting for servers to be ready for format")
-        self.manager.job.update_pattern(f_type, len(self._hosts))
+    def detect_start_mode(self, mode, qty=None):
+        """Detect when all the daos_servers reached desired mode at start.
+
+        Args:
+            mode (str): mode to detect using associated pattern.
+                i.e. "normal", "format", "reformat", "discover"
+            qty (int, optional): number of pattern occurrences expected to be
+                detected. If None is provided the method will use self._hosts.
+
+        Raises:
+            ServerFailed: if the server fails to start in the user provided
+                mode or expected quatity of servers to be started is not met.
+
+        """
+        if qty is None:
+            qty = len(self._hosts)
+        self.log.info(
+            "<SERVER> Waiting for servers to be ready in %s mode", mode)
+        self.manager.job.update_pattern(mode, qty)
         try:
             self.manager.run()
         except CommandFailure as error:
             self.kill()
             raise ServerFailed(
-                "Failed to start servers before format: {}".format(error))
+                "Failed to start servers in <{}> mode: {}".format(mode, error))
 
     def detect_io_server_start(self, host_qty=None):
         """Detect when all the daos_io_servers have started.
@@ -553,8 +579,11 @@ class DaosServerManager(SubprocessManager):
         # Prepare the servers
         self.prepare()
 
+        if self.manager.job.discover_mode:
+            self.discover()
+
         # Start the servers and wait for them to be ready for storage format
-        self.detect_format_ready()
+        self.detect_start_mode("format")
 
         # Format storage and wait for server to change ownership
         self.log.info(
@@ -568,8 +597,64 @@ class DaosServerManager(SubprocessManager):
 
         return True
 
+    def discover(self):
+        """Start the server through the job manager."""
+        # Create the empty file
+        original_config = self.manager.job.yaml.filename
+        config_file = ".".join([original_config, "discovery"])
+        pcmd(self._hosts, "touch {}".format(config_file))
+        self.manager.job.config.value = config_file
+
+        # Start the servers and wait for them to be ready for storage format
+        self.detect_start_mode("discover")
+
+        self.generated_yaml = self.dmg.config_generate(
+            self.get_config_value("access_points"),
+            self.manager.job.discover_pmem,
+            self.manager.job.discover_nvme,
+            self.manager.job.discover_net)
+
+        messages = self.stop_server_processes()
+        if messages:
+            raise ServerFailed(
+                "Failed to stop servers:\n  {}".format("\n  ".join(messages)))
+
+        self.log.info("<SERVER> Writing generated config yaml")
+        self.manager.job.yaml.filename = original_config
+        self.manager.job.yaml.write_yaml(self.generated_yaml)
+        self.manager.job.config.value = self.manager.job.yaml.filename
+
     def stop(self):
-        """Stop the server through the runner."""
+        """Stop the server through the runner.
+
+        Raises:
+            ServerFailed: if something went wrong stopping servers.
+
+        """
+        messages = self.stop_server_processes()
+
+        if self.manager.job.using_nvme:
+            # Reset the storage
+            try:
+                self.reset_storage()
+            except ServerFailed as error:
+                messages.append(str(error))
+
+            # Make sure the mount directory belongs to non-root user
+            self.set_scm_mount_ownership()
+
+        # Report any errors after all stop actions have been attempted
+        if messages:
+            raise ServerFailed(
+                "Failed to stop servers:\n  {}".format("\n  ".join(messages)))
+
+    def stop_server_processes(self):
+        """Stop server processes.
+
+        Returns:
+            list: error messages occurred when stopping server processes.
+
+        """
         self.log.info(
             "<SERVER> Stopping server %s command", self.manager.command)
 
@@ -587,20 +672,7 @@ class DaosServerManager(SubprocessManager):
         # Kill any leftover processes that may not have been stopped correctly
         self.kill()
 
-        if self.manager.job.using_nvme:
-            # Reset the storage
-            try:
-                self.reset_storage()
-            except ServerFailed as error:
-                messages.append(str(error))
-
-            # Make sure the mount directory belongs to non-root user
-            self.set_scm_mount_ownership()
-
-        # Report any errors after all stop actions have been attempted
-        if messages:
-            raise ServerFailed(
-                "Failed to stop servers:\n  {}".format("\n  ".join(messages)))
+        return messages
 
     def get_environment_value(self, name):
         """Get the server config value associated with the env variable name.
