@@ -12,7 +12,7 @@
 
 // To use a test branch (i.e. PR) until it lands to master
 // I.e. for testing library changes
-//@Library(value="pipeline-lib@your_branch") _
+@Library(value="pipeline-lib@schan_restructure") _
 
 boolean doc_only_change() {
     if (cachedCommitPragma(pragma: 'Doc-only') == 'true') {
@@ -156,9 +156,11 @@ String unit_packages() {
                            'libyaml-devel ' +
                            'valgrind-devel patchelf'
         if (need_qb) {
-            // TODO: these should be gotten from the Requires: of RPM
-            packages += " spdk-tools mercury-2.0.0~rc1" +
-                        " boost-devel libisa-l_crypto libfabric-debuginfo"
+            unstash stage_info['target'] + '-required-mercury-rpm-version'
+            packages += " spdk-tools mercury-" +
+                        readFile(stage_info['target'] +
+                                 '-required-mercury-rpm-version').trim() +
+                        " libisa-l_crypto"
         }
         return packages
     } else {
@@ -659,6 +661,11 @@ pipeline {
                     post {
                         success {
                             buildRpmPost condition: 'success'
+                            script {
+                                Map stage_info = parseStageInfo()
+                                    stash name: stage_info['target'] + '-required-mercury-rpm-version',
+                                          includes: stage_info['target'] + '-required-mercury-rpm-version'
+                            }
                         }
                         unstable {
                             buildRpmPost condition: 'unstable'
@@ -1323,7 +1330,7 @@ pipeline {
                         expression { ! skip_ftest('el7') }
                     }
                     agent {
-                        label 'ci_vm9'
+                        label 'stage_vm9'
                     }
                     steps {
                         functionalTest inst_repos: daos_repos(),
