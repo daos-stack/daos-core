@@ -26,7 +26,28 @@ hosts: !mux
       - boro-C
 timeout: 600
 tests: !mux
-  self_np:
+
+###### 4KB aligned, 1MB Bulk transfer, 16 RPC in flight #####
+  self_file_1:
+    name: self_test_file_1_
+    test_servers_bin: crt_launch
+    test_servers_arg: "-e ../tests/test_group_np_srv --name selftest_srv_grp"
+    test_servers_env: ""
+    test_servers_ppn: "1"
+
+    test_clients_env: ""
+    test_clients_ppn: 1
+    test_clients_bin:
+      - ../../../../bin/self_test
+      - ../../../../bin/self_test
+      - ../tests/test_group_np_cli
+    test_clients_arg:
+      - " -f ../../../../etc/selftest.cnf -c align_4k_inFlight_16_size_1M_B"
+      - " -f ../../../../etc/selftest.cnf -c align_4k_inFlight_16_size_1M_B"
+      - "--name client-group --attach_to selftest_srv_grp --shut_only"
+
+###### 1KB aligned, 1MB Bulk transfer, 1 RPC in flight #####
+  self_file_2:
     name: self_test_np
     test_servers_bin: crt_launch
     test_servers_arg: "-e ../tests/test_group_np_srv --name selftest_srv_grp"
@@ -36,10 +57,70 @@ tests: !mux
     test_clients_env: ""
     test_clients_ppn: 1
     test_clients_bin:
-      - self_test
-      - self_test
+      - ../../../../bin/self_test
+      - ../../../../bin/self_test
+      - ../tests/test_group_np_cli
+    test_clients_arg:
+      - " -f ../../../../etc/selftest.cnf -c align_1k_inFlight_1_size_1M_B"
+      - " -f ../../../../etc/selftest.cnf -c align_1k_inFlight_1_size_1M_B"
+      - "--name client-group --attach_to selftest_srv_grp --shut_only"
+
+
+###### 1KB aligned, 1MB Bulk transfer, 4 RPC in flight #####
+  self_file_3:
+    name: self_test_np
+    test_servers_bin: crt_launch
+    test_servers_arg: "-e ../tests/test_group_np_srv --name selftest_srv_grp"
+    test_servers_env: ""
+    test_servers_ppn: "1"
+
+    test_clients_env: ""
+    test_clients_ppn: 1
+    test_clients_bin:
+      - ../../../../bin/self_test
+      - ../../../../bin/self_test
+      - ../tests/test_group_np_cli
+    test_clients_arg:
+      - " -f ../../../../etc/selftest.cnf -c align_1k_inFlight_4_size_1M_B"
+      - " -f ../../../../etc/selftest.cnf -c align_1k_inFlight_4_size_1M_B"
+      - "--name client-group --attach_to selftest_srv_grp --shut_only"
+
+###### 1KB aligned, 1MB Bulk transfer, 16 RPC in flight #####
+  self_file_4:
+    name: self_test_np
+    test_servers_bin: crt_launch
+    test_servers_arg: "-e ../tests/test_group_np_srv --name selftest_srv_grp"
+    test_servers_env: ""
+    test_servers_ppn: "1"
+
+    test_clients_env: ""
+    test_clients_ppn: 1
+    test_clients_bin:
+      - ../../../../bin/self_test
+      - ../../../../bin/self_test
+      - ../tests/test_group_np_cli
+    test_clients_arg:
+      - " -f ../../../../etc/selftest.cnf -c align_1k_inFlight_16_size_1M_B"
+      - " -f ../../../../etc/selftest.cnf -c align_1k_inFlight_16_size_1M_B"
+      - "--name client-group --attach_to selftest_srv_grp --shut_only"
+
+###### Command line input, Multiple sizes with bulk and IVO  #####
+  self_cmdline:
+    name: self_test_np
+    test_servers_bin: crt_launch
+    test_servers_arg: "-e ../tests/test_group_np_srv --name selftest_srv_grp"
+    test_servers_env: ""
+    test_servers_ppn: "1"
+
+    test_clients_env: ""
+    test_clients_ppn: 1
+    test_clients_bin:
+      - ../../../../bin/self_test
+      - ../../../../bin/self_test
       - ../tests/test_group_np_cli
     test_clients_arg:
       - "--group-name selftest_srv_grp --endpoint 0-1:0 --message-sizes \"b2000,b2000 0,0 b2000,b2000 i1000,i1000 b2000,i1000,i1000 0,0 i1000,1,0\" --max-inflight-rpcs 16 --repetitions 100 -t -n"
       - "--group-name selftest_srv_grp --endpoint 0-1:0 --master-endpoint 0-1:0 --message-sizes \"b2000,b2000 0,0 b2000,b2000 i1000,i1000 b2000,i1000,i1000 0,0 i1000,1,0\" --max-inflight-rpcs 16 --repetitions 100 -t -n"
       - "--name client-group --attach_to selftest_srv_grp --shut_only"
+
+

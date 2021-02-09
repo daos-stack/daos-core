@@ -323,6 +323,7 @@ getent passwd daos_agent >/dev/null || useradd -s /sbin/nologin -r -g daos_agent
 %files client
 %{_bindir}/cart_ctl
 %{_bindir}/self_test
+%{_prefix}/etc/selftest.cnf
 %{_bindir}/dmg
 %{_bindir}/daos_agent
 %{_bindir}/dfuse
