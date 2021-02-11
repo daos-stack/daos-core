@@ -7,7 +7,7 @@
 
 Name:          daos
 Version:       1.1.2.1
-Release:       11%{?relval}%{?dist}
+Release:       12%{?relval}%{?dist}
 Summary:       DAOS Storage Engine
 
 License:       BSD-2-Clause-Patent
@@ -43,7 +43,7 @@ BuildRequires: liblz4-devel
 BuildRequires: protobuf-c-devel
 BuildRequires: lz4-devel
 %endif
-BuildRequires: spdk-devel >= 20, spdk-devel < 21
+BuildRequires: spdk-devel >= 21.01
 %if (0%{?rhel} >= 7)
 BuildRequires: libisa-l-devel
 BuildRequires: libisa-l_crypto-devel
@@ -412,10 +412,13 @@ getent passwd daos_agent >/dev/null || useradd -s /sbin/nologin -r -g daos_agent
 %{_libdir}/*.a
 
 %changelog
+* Wed Feb 10 2021 Brian J. Murrell <brian.murrell@intel.com> - 1.1.2.1-12
+- Update to use spdk >= 21.01
+
 * Tue Feb 9 2021 Vish Venkatesan<vishwanath.venkatesan@intel.com> 1.1.2.1-11
 - Add new pmem specific version of DAOS common library
 
-* Fri Feb 6 2021 Saurabh Tandan <saurabh.tandan@intel.com> 1.1.2.1-10
+* Sat Feb 6 2021 Saurabh Tandan <saurabh.tandan@intel.com> 1.1.2.1-10
 - Added dbench as requirement for test package.
 
 * Wed Feb 3 2021 Hua Kuang <hua.kuang@intel.com> 1.1.2.1-9
