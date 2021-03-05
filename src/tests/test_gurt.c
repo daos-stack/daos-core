@@ -1,7 +1,24 @@
 /*
- * (C) Copyright 2016-2021 Intel Corporation.
+ * (C) Copyright 2016-2020 Intel Corporation.
  *
- * SPDX-License-Identifier: BSD-2-Clause-Patent
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * GOVERNMENT LICENSE RIGHTS-OPEN SOURCE SOFTWARE
+ * The Government's rights to use, modify, reproduce, release, perform, display,
+ * or disclose this software are subject to the terms of the Apache License as
+ * provided in Contract No. 8F-30005.
+ * Any reproduction of computer software, computer software documentation, or
+ * portions thereof marked with this legend must also reproduce the markings.
  */
 /*
  * This file tests macros in GURT
@@ -995,7 +1012,7 @@ test_gurt_hash_empty(void **state)
 	/* Traverse the empty hash table and look for entries */
 	expected_count = 0;
 	rc = d_hash_table_traverse(thtab, test_gurt_hash_traverse_count_cb,
-				   &expected_count);
+				    &expected_count);
 	assert_int_equal(rc, 0);
 
 	/* Get the first element in the table, which should be NULL */
@@ -1294,7 +1311,7 @@ hash_parallel_insert(struct hash_thread_arg *arg)
 	     i++) {
 		rc = d_hash_rec_insert(arg->thtab, arg->entries[i]->tl_key,
 				       TEST_GURT_HASH_KEY_LEN,
-				       &arg->entries[i]->tl_link, 1);
+				       &(arg->entries[i]->tl_link), 1);
 		if (arg->check_result)
 			TEST_THREAD_ASSERT(rc == 0);
 	}
@@ -1351,7 +1368,7 @@ hash_parallel_lookup(struct hash_thread_arg *arg)
 				       TEST_GURT_HASH_KEY_LEN);
 		if (arg->check_result)
 			/* Make sure the returned pointer is the right one */
-			TEST_THREAD_ASSERT(test == &arg->entries[i]->tl_link);
+			TEST_THREAD_ASSERT(test == &(arg->entries[i]->tl_link));
 	}
 
 	return NULL;
