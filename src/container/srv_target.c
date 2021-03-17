@@ -502,7 +502,7 @@ out:
 	ds_cont_child_put(cont);
 }
 
-static int
+int
 cont_start_dtx_reindex_ult(struct ds_cont_child *cont)
 {
 	int rc;

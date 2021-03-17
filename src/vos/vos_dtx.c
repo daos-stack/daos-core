@@ -93,12 +93,6 @@ dtx_umoff_flag2type(umem_off_t umoff)
 }
 
 static inline bool
-umoff_is_null(umem_off_t umoff)
-{
-	return umoff == UMOFF_NULL;
-}
-
-static inline bool
 dtx_is_aborted(uint32_t tx_lid)
 {
 	return tx_lid == DTX_LID_ABORTED;
@@ -341,7 +335,7 @@ dtx_cmt_ent_alloc(struct btr_instance *tins, d_iov_t *key_iov,
 	struct vos_dtx_cmt_ent	*dce = val_iov->iov_buf;
 
 	rec->rec_off = umem_ptr2off(&tins->ti_umm, dce);
-	if (!cont->vc_reindex_cmt_dtx || dce->dce_reindex) {
+	if (cont->vc_cmt_reindexed || dce->dce_reindex) {
 		d_list_add_tail(&dce->dce_committed_link,
 				&cont->vc_dtx_committed_list);
 		cont->vc_dtx_committed_count++;
@@ -370,7 +364,7 @@ dtx_cmt_ent_free(struct btr_instance *tins, struct btr_record *rec,
 
 	rec->rec_off = UMOFF_NULL;
 	d_list_del(&dce->dce_committed_link);
-	if (!cont->vc_reindex_cmt_dtx || dce->dce_reindex)
+	if (cont->vc_cmt_reindexed || dce->dce_reindex)
 		cont->vc_dtx_committed_count--;
 	else
 		cont->vc_dtx_committed_tmp_count--;
@@ -1789,7 +1783,7 @@ vos_dtx_check(daos_handle_t coh, struct dtx_id *dti, daos_epoch_t *epoch,
 		}
 	}
 
-	if (rc == -DER_NONEXIST && for_resent && cont->vc_reindex_cmt_dtx)
+	if (rc == -DER_NONEXIST && for_resent && !cont->vc_cmt_reindexed)
 		rc = -DER_AGAIN;
 
 	return rc;
@@ -2432,8 +2426,6 @@ vos_dtx_cmt_reindex(daos_handle_t coh, void *hint)
 
 	D_ASSERT(dbd->dbd_magic == DTX_CMT_BLOB_MAGIC);
 
-	cont->vc_reindex_cmt_dtx = 1;
-
 	for (i = 0; i < dbd->dbd_count; i++) {
 		if (daos_is_zero_dti(&dbd->dbd_committed_data[i].dce_xid) ||
 		    dbd->dbd_committed_data[i].dce_epoch == 0) {
@@ -2479,7 +2471,8 @@ out:
 		cont->vc_dtx_committed_count +=
 				cont->vc_dtx_committed_tmp_count;
 		cont->vc_dtx_committed_tmp_count = 0;
-		cont->vc_reindex_cmt_dtx = 0;
+		cont->vc_cmt_reindexed = 1;
+
 	}
 
 	return rc;
@@ -2650,7 +2643,6 @@ vos_dtx_cache_reset(daos_handle_t coh)
 {
 	struct vos_container	*cont;
 	struct umem_attr	 uma;
-	uint64_t		 hint = 0;
 	int			 rc = 0;
 
 	cont = vos_hdl2cont(coh);
@@ -2680,6 +2672,7 @@ vos_dtx_cache_reset(daos_handle_t coh)
 	cont->vc_dtx_committed_hdl = DAOS_HDL_INVAL;
 	cont->vc_dtx_committed_count = 0;
 	cont->vc_dtx_committed_tmp_count = 0;
+	cont->vc_cmt_reindexed = 0;
 
 	rc = lrua_array_alloc(&cont->vc_dtx_array, DTX_ARRAY_LEN, DTX_ARRAY_NR,
 			      sizeof(struct vos_dtx_act_ent),
@@ -2717,18 +2710,9 @@ vos_dtx_cache_reset(daos_handle_t coh)
 	}
 
 	rc = vos_dtx_act_reindex(cont);
-	if (rc != 0) {
+	if (rc != 0)
 		D_ERROR("Fail to reindex active DTX table: "DF_RC"\n",
 			DP_RC(rc));
-		goto out;
-	}
-
-	do {
-		rc = vos_dtx_cmt_reindex(coh, &hint);
-		if (rc < 0)
-			D_ERROR("Fail to reindex committed DTX table: "
-				DF_RC"\n", DP_RC(rc));
-	} while (rc == 0);
 
 out:
 	D_DEBUG(DB_TRACE, "Reset the DTX cache: "DF_RC"\n", DP_RC(rc));
