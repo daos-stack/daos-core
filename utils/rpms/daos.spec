@@ -216,6 +216,7 @@ This is the package needed to build software with the DAOS library.
 %{scons_exe} %{?_smp_mflags} \
       --config=force         \
       --no-rpath             \
+      --stack_mmap         \
       USE_INSTALLED=all      \
       CONF_DIR=%{conf_dir}   \
       PREFIX=%{buildroot}    \
@@ -225,6 +226,7 @@ This is the package needed to build software with the DAOS library.
 %{scons_exe} %{?_smp_mflags}          \
       --config=force                  \
       --no-rpath                      \
+      --stack_mmap                   \
       --install-sandbox=%{buildroot} \
       %{buildroot}%{_prefix}         \
       %{buildroot}%{conf_dir}        \
@@ -401,6 +403,9 @@ getent passwd daos_agent >/dev/null || useradd -s /sbin/nologin -r -g daos_agent
 %{_libdir}/*.a
 
 %changelog
+* Thu Mar 25 2021 Bruno Faccini <bruno.faccini@intel.com> 1.3.0-3
+- Build with --stack_mmap
+
 * Thu Mar 18 2021 Maureen Jean <maureen.jean@intel.com> 1.3.0-3
 - Update to python3
 

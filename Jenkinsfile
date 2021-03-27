@@ -784,7 +784,7 @@ pipeline {
                         sconsBuild parallel_build: parallel_build(),
                                    stash_files: 'ci/test_files_to_stash.txt',
                                    scons_exe: 'scons-3',
-                                   scons_args: scons_faults_args()
+                                   scons_args: scons_faults_args() + " --stack_mmap"
                     }
                     post {
                         always {
@@ -823,7 +823,7 @@ pipeline {
                         sconsBuild parallel_build: parallel_build(),
                                    stash_files: 'ci/test_files_to_stash.txt',
                                    scons_exe: 'scons-3',
-                                   scons_args: scons_faults_args()
+                                   scons_args: scons_faults_args() + " --stack_mmap"
                     }
                     post {
                         always {
@@ -938,7 +938,7 @@ pipeline {
                     steps {
                         sconsBuild parallel_build: parallel_build(),
                                    scons_exe: 'scons-3',
-                                   scons_args: scons_faults_args() + " PREFIX=/opt/daos TARGET_TYPE=release",
+                                   scons_args: scons_faults_args() + " PREFIX=/opt/daos TARGET_TYPE=release --stack_mmap",
                                    build_deps: "no"
                     }
                     post {
@@ -973,7 +973,7 @@ pipeline {
                     }
                     steps {
                         sconsBuild parallel_build: parallel_build(),
-                                   scons_args: scons_faults_args() + " PREFIX=/opt/daos TARGET_TYPE=release",
+                                   scons_args: scons_faults_args() + " PREFIX=/opt/daos TARGET_TYPE=release --stack_mmap",
                                    build_deps: "no",
                                    scons_exe: 'scons-3'
                     }
@@ -1008,7 +1008,7 @@ pipeline {
                     }
                     steps {
                         sconsBuild parallel_build: parallel_build(),
-                                   scons_args: scons_faults_args() + " PREFIX=/opt/daos TARGET_TYPE=release",
+                                   scons_args: scons_faults_args() + " PREFIX=/opt/daos TARGET_TYPE=release --stack_mmap",
                                    build_deps: "no"
                     }
                     post {
@@ -1042,7 +1042,7 @@ pipeline {
                     }
                     steps {
                         sconsBuild parallel_build: parallel_build(),
-                                   scons_args: scons_faults_args() + " PREFIX=/opt/daos TARGET_TYPE=release",
+                                   scons_args: scons_faults_args() + " PREFIX=/opt/daos TARGET_TYPE=release --stack_mmap",
                                    build_deps: "no"
                     }
                     post {
@@ -1080,7 +1080,7 @@ pipeline {
                     steps {
                         sconsBuild parallel_build: parallel_build(),
                                    stash_files: 'ci/test_files_to_stash.txt',
-                                   scons_args: scons_faults_args()
+                                   scons_args: scons_faults_args() + " --stack_mmap"
                     }
                     post {
                         always {
@@ -1113,7 +1113,7 @@ pipeline {
                     }
                     steps {
                         sconsBuild parallel_build: parallel_build(),
-                                   scons_args: scons_faults_args() + " PREFIX=/opt/daos TARGET_TYPE=release",
+                                   scons_args: scons_faults_args() + " PREFIX=/opt/daos TARGET_TYPE=release --stack_mmap",
                                    build_deps: "no"
                     }
                     post {
@@ -1148,7 +1148,7 @@ pipeline {
                     }
                     steps {
                         sconsBuild parallel_build: parallel_build(),
-                                   scons_args: scons_faults_args() + " PREFIX=/opt/daos TARGET_TYPE=release",
+                                   scons_args: scons_faults_args() + " PREFIX=/opt/daos TARGET_TYPE=release --stack_mmap",
                                    build_deps: "no"
                     }
                     post {
