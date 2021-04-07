@@ -1373,6 +1373,7 @@ class DaosContainer():
         # 2. Enable checksum,
         # 3. Server Verfiy
         # 4. Chunk Size Allocation.
+        self.cont_input_values.enable_chksum = True
         if ((self.cont_input_values.type != "Unknown")
                 and (self.cont_input_values.enable_chksum is False)):
             # Only type like posix, hdf5 defined.
