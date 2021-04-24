@@ -160,6 +160,8 @@ func (svc *ControlService) memberStateResults(instances []*EngineInstance, tgtSt
 // rank(s). After attempting to stop instances through harness (when either all
 // instances are stopped or timeout has occurred), populate response results
 // based on local instance state.
+//
+// Whilst verifying the rank state change don't forward RankDownevents.
 func (svc *ControlService) StopRanks(ctx context.Context, req *ctlpb.RanksReq) (*ctlpb.RanksResp, error) {
 	if req == nil {
 		return nil, errors.New("nil request")
@@ -179,9 +181,8 @@ func (svc *ControlService) StopRanks(ctx context.Context, req *ctlpb.RanksReq) (
 		return nil, err
 	}
 
-	// don't publish rank down events whilst performing controlled shutdown
-	svc.events.DisableEventIDs(events.RASRankDown)
-	defer svc.events.EnableEventIDs(events.RASRankDown)
+	svc.events.DisableForwarding(events.RASRankDown)
+	defer svc.events.EnableForwarding(events.RASRankDown)
 
 	for _, srv := range instances {
 		if !srv.isStarted() {
