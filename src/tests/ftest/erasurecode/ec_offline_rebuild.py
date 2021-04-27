@@ -5,7 +5,6 @@
   SPDX-License-Identifier: BSD-2-Clause-Patent
 '''
 from ec_utils import ErasureCodeIor
-from apricot import skipForTicket
 
 
 class EcOfflineRebuild(ErasureCodeIor):
@@ -16,7 +15,6 @@ class EcOfflineRebuild(ErasureCodeIor):
     :avocado: recursive
     """
 
-    @skipForTicket("DAOS-6450")
     def test_ec_offline_rebuild(self):
         """Jira ID: DAOS-5894.
 
@@ -25,9 +23,10 @@ class EcOfflineRebuild(ErasureCodeIor):
                   EC object type class for small and large transfer sizes.
                   kill single server, Wait to finish rebuild,
                   verify all IOR read data and verified.
-
-        :avocado: tags=all,hw,large,ib2,full_regression
-        :avocado: tags=ec,ec_offline_rebuild
+        :avocado: tags=all,full_regression
+        :avocado: tags=hw,large,ib2
+        :avocado: tags=ec
+        :avocado: tags=ec_offline_rebuild
         """
         # Write IOR data set with different EC object and different sizes
         self.ior_write_dataset()
