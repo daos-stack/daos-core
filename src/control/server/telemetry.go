@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	_ "net/http/pprof"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"

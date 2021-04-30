@@ -3,14 +3,13 @@
 //
 // SPDX-License-Identifier: BSD-2-Clause-Patent
 //
-// +build linux,amd64
-//
 
 package promexp
 
 import (
 	"context"
 	"fmt"
+	"math"
 	"regexp"
 	"strings"
 	"unicode"
@@ -23,15 +22,19 @@ import (
 )
 
 type (
+	bucketMap map[string]float64
+
 	Collector struct {
 		log            logging.Logger
 		summary        *prometheus.SummaryVec
 		ignoredMetrics []*regexp.Regexp
 		sources        []*EngineSource
+		buckets        bucketMap
 	}
 
 	CollectorOpts struct {
-		Ignores []string
+		Ignores   []string
+		BucketMap bucketMap
 	}
 
 	EngineSource struct {
@@ -42,6 +45,14 @@ type (
 
 	labelMap map[string]string
 )
+
+func (m bucketMap) Get(name string) (float64, error) {
+	upper, found := m[name]
+	if !found {
+		return 0, errors.Errorf("%q not found in bucket map", name)
+	}
+	return upper, nil
+}
 
 func NewEngineSource(parent context.Context, idx uint32, rank uint32) (*EngineSource, error) {
 	ctx, err := telemetry.Init(parent, idx)
@@ -56,6 +67,27 @@ func NewEngineSource(parent context.Context, idx uint32, rank uint32) (*EngineSo
 	}, nil
 }
 
+func defaultBucketMap() bucketMap {
+	return bucketMap{
+		"256B":  1 << 8,
+		"512B":  1 << 9,
+		"1KB":   1 << 10,
+		"2KB":   1 << 11,
+		"4KB":   1 << 12,
+		"8KB":   1 << 13,
+		"16KB":  1 << 14,
+		"32KB":  1 << 15,
+		"64KB":  1 << 16,
+		"128KB": 1 << 17,
+		"256KB": 1 << 18,
+		"512KB": 1 << 19,
+		"1MB":   1 << 20,
+		"2MB":   (1 << 20) * 2,
+		"4MB":   (1 << 20) * 4,
+		"_4MB":  math.Inf(0),
+	}
+}
+
 func defaultCollectorOpts() *CollectorOpts {
 	return &CollectorOpts{}
 }
@@ -68,10 +100,14 @@ func NewCollector(log logging.Logger, opts *CollectorOpts, sources ...*EngineSou
 	if opts == nil {
 		opts = defaultCollectorOpts()
 	}
+	if opts.BucketMap == nil {
+		opts.BucketMap = defaultBucketMap()
+	}
 
 	c := &Collector{
 		log:     log,
 		sources: sources,
+		buckets: opts.BucketMap,
 		summary: prometheus.NewSummaryVec(
 			prometheus.SummaryOpts{
 				Namespace: "engine",
@@ -107,43 +143,6 @@ func sanitizeMetricName(in string) string {
 
 		return r
 	}, strings.TrimLeft(in, "/"))
-}
-
-func fixPath(in string) (labels labelMap, name string) {
-	name = sanitizeMetricName(in)
-
-	labels = make(labelMap)
-
-	// Clean up metric names and parse out useful labels
-
-	ID_re := regexp.MustCompile(`ID_+(\d+)_?`)
-	name = ID_re.ReplaceAllString(name, "")
-
-	io_re := regexp.MustCompile(`io_+(\d+)_?`)
-	io_matches := io_re.FindStringSubmatch(name)
-	if len(io_matches) > 0 {
-		labels["target"] = io_matches[1]
-		replacement := "io"
-		if strings.HasSuffix(io_matches[0], "_") {
-			replacement += "_"
-		}
-		name = io_re.ReplaceAllString(name, replacement)
-	}
-
-	net_re := regexp.MustCompile(`net_+(\d+)_+(\d+)_?`)
-	net_matches := net_re.FindStringSubmatch(name)
-	if len(net_matches) > 0 {
-		labels["rank"] = net_matches[1]
-		labels["context"] = net_matches[2]
-
-		replacement := "net"
-		if strings.HasSuffix(net_matches[0], "_") {
-			replacement += "_"
-		}
-		name = net_re.ReplaceAllString(name, replacement)
-	}
-
-	return
 }
 
 func (es *EngineSource) Collect(log logging.Logger, ch chan<- *rankMetric) {
@@ -220,25 +219,39 @@ func (m cvMap) add(name, help string, value float64, labels labelMap) {
 	cv.With(prometheus.Labels(labels)).Add(value)
 }
 
-type metricStat struct {
-	name  string
-	desc  string
-	value float64
+type hvMap map[string]*daosHistogramVec
+
+func (m hvMap) add(name, help string, bucket, value, sum float64, samples uint64, labels labelMap) {
+	var hv *daosHistogramVec
+	var found bool
+
+	hv, found = m[name]
+	if !found {
+		hv = newDaosHistogramVec(prometheus.HistogramOpts{
+			Name: name,
+			Help: help,
+		}, labels.keys())
+		m[name] = hv
+	}
+	hv.With(prometheus.Labels(labels)).AddBucketValue(bucket, value, sum, samples)
 }
 
-func getMetricStats(baseName, desc string, m telemetry.Metric) (stats []*metricStat) {
-	ms, ok := m.(telemetry.StatsMetric)
-	if !ok {
-		return
-	}
+type metricStat struct {
+	name      string
+	desc      string
+	value     float64
+	isCounter bool
+}
 
+func getMetricStats(baseName, desc string, ms telemetry.StatsMetric) (stats []*metricStat) {
 	if ms.SampleSize() == 0 {
 		return
 	}
 
 	for name, s := range map[string]struct {
-		fn   func() float64
-		desc string
+		fn        func() float64
+		desc      string
+		isCounter bool
 	}{
 		"min": {
 			fn:   ms.FloatMin,
@@ -256,16 +269,80 @@ func getMetricStats(baseName, desc string, m telemetry.Metric) (stats []*metricS
 			fn:   ms.StdDev,
 			desc: " (std dev)",
 		},
+		"samples": {
+			fn:        func() float64 { return float64(ms.SampleSize()) },
+			desc:      " (samples)",
+			isCounter: true,
+		},
 	} {
 		stats = append(stats, &metricStat{
-			name:  baseName + "_" + name,
-			desc:  desc + s.desc,
-			value: s.fn(),
+			name:      baseName + "_" + name,
+			desc:      desc + s.desc,
+			value:     s.fn(),
+			isCounter: s.isCounter,
 		})
 	}
 
 	return
 }
+
+var (
+	id_re  = regexp.MustCompile(`ID_+(\d+)_?`)
+	io_re  = regexp.MustCompile(`io_+(\d+)_?`)
+	net_re = regexp.MustCompile(`net_+(\d+)_+(\d+)_?`)
+)
+
+func fixPath(in string) (labels labelMap, name string) {
+	name = sanitizeMetricName(in)
+
+	labels = make(labelMap)
+
+	// Clean up metric names and parse out useful labels
+	name = id_re.ReplaceAllString(name, "")
+
+	io_matches := io_re.FindStringSubmatch(name)
+	if len(io_matches) > 0 {
+		labels["target"] = io_matches[1]
+		replacement := "io"
+		if strings.HasSuffix(io_matches[0], "_") {
+			replacement += "_"
+		}
+		name = io_re.ReplaceAllString(name, replacement)
+	}
+
+	net_matches := net_re.FindStringSubmatch(name)
+	if len(net_matches) > 0 {
+		labels["rank"] = net_matches[1]
+		labels["context"] = net_matches[2]
+
+		replacement := "net"
+		if strings.HasSuffix(net_matches[0], "_") {
+			replacement += "_"
+		}
+		name = net_re.ReplaceAllString(name, replacement)
+	}
+
+	return
+}
+
+type patternSet []*regexp.Regexp
+
+func (ps patternSet) Matches(in string) (matches []string) {
+	for _, p := range ps {
+		matches = p.FindStringSubmatch(in)
+		if len(matches) > 0 {
+			return
+		}
+	}
+	return
+}
+
+var (
+	latHistPats = patternSet{
+		regexp.MustCompile(`(engine_io_fetch_latency)_(\w+)`),
+		regexp.MustCompile(`(engine_io_update_latency)_(\w+)`),
+	}
+)
 
 func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 	rankMetrics := make(chan *rankMetric)
@@ -278,6 +355,7 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 
 	gauges := make(gvMap)
 	counters := make(cvMap)
+	histograms := make(hvMap)
 
 	for rm := range rankMetrics {
 		labels, path := fixPath(rm.m.Path())
@@ -288,17 +366,44 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 		baseName := prometheus.BuildFQName("engine", path, name)
 		desc := rm.m.Desc()
 
-		switch rm.m.Type() {
-		case telemetry.MetricTypeGauge:
+		if matches := latHistPats.Matches(baseName); len(matches) > 0 {
+			sm, ok := rm.m.(telemetry.StatsMetric)
+			if !ok || sm.FloatValue() == 0 {
+				continue
+			}
+
+			baseName = matches[1]
+			upperBound, err := c.buckets.Get(matches[2])
+			if err != nil {
+				c.log.Errorf("unable to parse bucket name %q", matches[2])
+				continue
+			}
+
+			// Create a histogram for per-size latencies.
+			histograms.add(baseName, desc, upperBound, sm.FloatValue(), sm.FloatSum(), sm.SampleSize(), labels)
+
+			// Create a histogram for size distribution.
+			sizeName := strings.ReplaceAll(baseName, "latency", "sizes")
+			histograms.add(sizeName, desc, upperBound, float64(sm.SampleSize()), sm.FloatSum(), sm.SampleSize(), labels)
+
+			continue
+		}
+
+		switch metric := rm.m.(type) {
+		case *telemetry.Gauge:
 			if c.isIgnored(baseName) {
 				continue
 			}
 
 			gauges.add(baseName, desc, rm.m.FloatValue(), labels)
-			for _, ms := range getMetricStats(baseName, desc, rm.m) {
+			for _, ms := range getMetricStats(baseName, desc, metric) {
+				if ms.isCounter {
+					counters.add(ms.name, ms.desc, ms.value, labels)
+					continue
+				}
 				gauges.add(ms.name, ms.desc, ms.value, labels)
 			}
-		case telemetry.MetricTypeCounter:
+		case *telemetry.Counter:
 			if c.isIgnored(baseName) {
 				break
 			}
@@ -314,6 +419,9 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 	}
 	for _, cv := range counters {
 		cv.Collect(ch)
+	}
+	for _, hv := range histograms {
+		hv.Collect(ch)
 	}
 }
 
