@@ -7,8 +7,6 @@
 #ifndef __CRT_SELF_TEST_H__
 #define __CRT_SELF_TEST_H__
 
-
-
 /*
  * List of supported self-test strategies:
  *
@@ -126,6 +124,7 @@
 #define CRT_ST_BUF_ALIGN_MIN (0)
 /** Maximum alignment must be one less than a power of two */
 #define CRT_ST_BUF_ALIGN_MAX (255)
+#define SELF_TEST_MAX_SECTION_NAME_SIZE 256
 
 enum crt_st_msg_type {
 	CRT_SELF_TEST_MSG_TYPE_EMPTY = 0,

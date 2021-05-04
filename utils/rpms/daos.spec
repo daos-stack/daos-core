@@ -353,6 +353,8 @@ getent passwd daos_agent >/dev/null || useradd -s /sbin/nologin -r -g daos_agent
 %files client
 %{_bindir}/cart_ctl
 %{_bindir}/self_test
+%{_prefix}/etc/selftest.cnf
+%{_prefix}/etc/selftest_expected.cnf
 %{_bindir}/dmg
 %{_bindir}/daos_agent
 %{_bindir}/dfuse
@@ -422,6 +424,9 @@ getent passwd daos_agent >/dev/null || useradd -s /sbin/nologin -r -g daos_agent
 %attr(4750,root,daos_server) %{_bindir}/daos_firmware
 
 %changelog
+* Thu Apr 22 2021 Steve Bollinger <stevenx.bollinger@intel.com> - 1.3.0-14
+- Add selftest configuration files
+
 * Wed Apr 21 2021 Tom Nabarro <tom.nabarro@intel.com> - 1.3.0-13
 - Relax ipmctl version requirement on leap15 as we have runtime checks
 
