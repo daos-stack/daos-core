@@ -548,7 +548,7 @@ def get_test_list(tags):
         if not test_list:
             test_list = ["./"]
         version = float(get_output(["avocado", "-v"]).split()[-1])
-        if version >= 82.0:
+        if version >= 80.0:
             command = ["avocado", "--paginator=off", "list"]
         else:
             command = ["avocado", "list", "--paginator=off"]
@@ -598,6 +598,8 @@ def get_nvme_replacement(args):
             Intel Corporation NVMe Datacenter SSD [Optane]
         da:00.0 Non-Volatile memory controller:
             Intel Corporation NVMe Datacenter SSD [Optane]
+        00:07.0 Non-Volatile memory controller:
+            Intel Corporation QEMU NVM Express Controller (rev 02)
 
     Optionally filter the above output even further with a specified search
     string (e.g. '--nvme=auto:Optane'):
@@ -606,6 +608,10 @@ def get_nvme_replacement(args):
             Intel Corporation NVMe Datacenter SSD [Optane]
         da:00.0 Non-Volatile memory controller:
             Intel Corporation NVMe Datacenter SSD [Optane]
+           (e.g. '--nvme=auto:QEMU'):
+        $ lspci | grep 'Non-Volatile memory controller:' | grep 'QEMU'
+        00:07.0 Non-Volatile memory controller:
+            Intel Corporation QEMU NVM Express Controller (rev 02)
 
     Args:
         args (argparse.Namespace): command line arguments for this program
@@ -637,7 +643,7 @@ def get_nvme_replacement(args):
     # Verify each server host has the same NVMe PCI addresses
     output_data = list(task.iter_buffers())
     if len(output_data) > 1:
-        print("ERROR: Non-homogeneous NVMe PCI addresses.")
+        print("ERROR: Non-homogeneous NVMe PCI addresses in:\n", output_data)
         sys.exit(1)
 
     # Get the list of NVMe PCI addresses found in the output

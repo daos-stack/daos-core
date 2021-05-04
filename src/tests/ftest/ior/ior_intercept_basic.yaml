@@ -9,15 +9,15 @@ server_config:
     servers:
         log_mask: INFO
         bdev_class: nvme
-        bdev_list: ["0000:81:00.0","0000:da:00.0"]
+        bdev_list: ["aaaa:aa:aa.a","bbbb:bb:bb.b"]
         scm_class: dcpm
         scm_list: ["/dev/pmem0"]
 pool:
     mode: 146 # 146 is RW
     name: daos_server
     # 300 G
-    scm_size: 30000000000
-    nvme_size: 420000000000
+    scm_size: 30GB
+    nvme_size: 420GB
     svcn: 1
     control_method: dmg
 container:

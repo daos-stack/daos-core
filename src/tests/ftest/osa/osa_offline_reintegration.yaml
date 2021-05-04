@@ -17,7 +17,7 @@ server_config:
       fabric_iface_port: 31416
       log_file: daos_server0.log
       bdev_class: nvme
-      bdev_list: ["0000:81:00.0"]
+      bdev_list: ["aaaa:aa:aa.a"]
       scm_class: dcpm
       scm_list: ["/dev/pmem0"]
       scm_mount: /mnt/daos0
@@ -31,7 +31,7 @@ server_config:
       fabric_iface_port: 31516
       log_file: daos_server1.log
       bdev_class: nvme
-      bdev_list: ["0000:da:00.0"]
+      bdev_list: ["bbbb:bb:bb.b"]
       scm_class: dcpm
       scm_list: ["/dev/pmem1"]
       scm_mount: /mnt/daos1
@@ -49,8 +49,8 @@ dmg:
 pool:
   mode: 146
   name: daos_server
-  scm_size: 6000000000
-  nvme_size: 54000000000
+  scm_size: 6GB
+  nvme_size: 54GB
   svcn: 4
   control_method: dmg
   rebuild_timeout: 120

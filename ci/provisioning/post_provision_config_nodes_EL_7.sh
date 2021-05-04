@@ -116,10 +116,16 @@ post_provision_config_nodes() {
     rm -f /tmp/daos_control.log
     time dnf -y install $LSB_RELEASE
 
+    n=3
+    rc=0
     # shellcheck disable=SC2086
-    if [ -n "$INST_RPMS" ] &&
-       ! time dnf -y install $INST_RPMS; then
+    while [ -n "$INST_RPMS" ] &&
+          [ $n -gt 0 ] &&
+          ! time dnf -y install $INST_RPMS; do
         rc=${PIPESTATUS[0]}
+        (( $n-- ))
+    done
+    if [ "$rc" -ne 0 ]; then
         dump_repos
         exit "$rc"
     fi

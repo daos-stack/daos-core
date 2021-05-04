@@ -27,6 +27,7 @@ add_repo() {
     # see if a package we know is in the repo is present
     if repo=$(dnf repoquery --qf "%{repoid}" "$1" 2>/dev/null | grep ..\*); then
         DNF_REPO_ARGS+=" --enablerepo=$repo"
+        time dnf --disablerepo=\* --enablerepo="$repo" makecache
     else
         local repo_url="${REPOSITORY_URL}${add_repo}"
         local repo_name
@@ -34,7 +35,7 @@ add_repo() {
         if ! dnf repolist | grep "$repo_name"; then
             dnf config-manager --add-repo="${repo_url}" >&2
             if ! $gpg_check; then
-                disable_gpg_check "$add_repo" >&2
+                disable_gpg_check "$repo_url" >&2
             fi
         fi
         DNF_REPO_ARGS+=" --enablerepo=$repo_name"
@@ -75,22 +76,25 @@ dump_repos() {
 
 env > /root/last_run-env.txt
 if ! grep ":$MY_UID:" /etc/group; then
-  groupadd -g "$MY_UID" jenkins
+  groupadd -g "$MY_UID" ${REMOTE_ACCT:-jenkins}
 fi
 mkdir -p /localhome
-if ! grep ":$MY_UID:$MY_UID:" /etc/passwd; then
+if grep ":$MY_UID:$MY_UID:" /etc/passwd; then
+  home=$(grep "$MY_UID:$MY_UID::" /etc/passwd | cut -d: -f 6)
+else
   useradd -b /localhome -g "$MY_UID" -u "$MY_UID" -s /bin/bash jenkins
+  home=/localhome/${REMOTE_ACCT:-jenkins}
 fi
-mkdir -p /localhome/jenkins/.ssh
-cat /tmp/ci_key.pub >> /localhome/jenkins/.ssh/authorized_keys
+mkdir -p $home/.ssh
+cat /tmp/ci_key.pub >> $home/.ssh/authorized_keys
 cat /tmp/ci_key.pub >> /root/.ssh/authorized_keys
-mv /tmp/ci_key.pub /localhome/jenkins/.ssh/id_rsa.pub
-mv /tmp/ci_key /localhome/jenkins/.ssh/id_rsa
-mv /tmp/ci_key_ssh_config /localhome/jenkins/.ssh/config
-chmod 700 /localhome/jenkins/.ssh
-chmod 600 /localhome/jenkins/.ssh/{authorized_keys,id_rsa*,config}
-chown -R jenkins.jenkins /localhome/jenkins/
-echo "jenkins ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/jenkins
+mv /tmp/ci_key.pub $home/.ssh/id_rsa.pub
+mv /tmp/ci_key $home/.ssh/id_rsa
+mv /tmp/ci_key_ssh_config $home/.ssh/config
+chmod 700 $home/.ssh
+chmod 600 $home/.ssh/{authorized_keys,id_rsa*,config}
+chown -R ${REMOTE_ACCT:-jenkins}.${REMOTE_ACCT:-jenkins} $home
+echo "${REMOTE_ACCT:-jenkins} ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/${REMOTE_ACCT:-jenkins}
 
 # defined in ci/functional/post_provision_config_nodes_<distro>.sh
 # and catted to the remote node along with this script

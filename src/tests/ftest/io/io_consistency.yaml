@@ -13,14 +13,14 @@ server_config:
   servers:
     log_mask: ERR
     bdev_class: nvme
-    bdev_list: ["0000:81:00.0"]
+    bdev_list: ["aaaa:aa:aa.a"]
     scm_class: dcpm
     scm_list: ["/dev/pmem0"]
 pool:
   mode: 146
   name: daos_server
-  scm_size: 5000000000
-  nvme_size: 20000000000
+  scm_size: 5GB
+  nvme_size: 20GB
   control_method: dmg
 container:
   type: POSIX

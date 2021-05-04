@@ -15,7 +15,7 @@ server_config:
   servers:
     log_mask: ERR
     bdev_class: nvme
-    bdev_list: ["0000:81:00.0","0000:da:00.0"]
+    bdev_list: ["aaaa:aa:aa.a","bbbb:bb:bb.b"]
     scm_class: dcpm
     scm_list: ["/dev/pmem0"]
     scm_size: 400
@@ -26,8 +26,8 @@ pool:
   createset:
     setname: daos_server
   createsize:
-    scm_size: 40000000000
-    nvme_size: 400000000000 # large nvme_size for mdtest 1M file creation
+    scm_size: 40GB
+    nvme_size: 400GB # large nvme_size for mdtest 1M file creation
   createsvc:
     svcn: 3
   control_method: dmg
