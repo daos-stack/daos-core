@@ -278,7 +278,6 @@ class DestroyTests(TestWithServers):
             str(valid_group.value))
         self.pool.pool.group = valid_group
 
-    @skipForTicket("DAOS-2742")
     def test_destroy_wrong_group(self):
         """Test destroying a pool.
 
@@ -473,7 +472,6 @@ class DestroyTests(TestWithServers):
             exception_detected,
             "No exception when deleting a connected pool with data")
 
-    @skipForTicket("DAOS-2742")
     def test_destroy_async(self):
         """Destroy pool asynchronously.
 
