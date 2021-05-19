@@ -27,6 +27,7 @@ RDB_STRING_KEY(ds_pool_prop_, owner);
 RDB_STRING_KEY(ds_pool_prop_, owner_group);
 RDB_STRING_KEY(ds_pool_prop_, connectable);
 RDB_STRING_KEY(ds_pool_prop_, nhandles);
+RDB_STRING_KEY(ds_pool_prop_, policy);
 
 /** pool handle KVS */
 RDB_STRING_KEY(ds_pool_prop_, handles);
@@ -61,6 +62,9 @@ struct daos_prop_entry pool_prop_entries_default[DAOS_PROP_PO_NUM] = {
 	}, {
 		.dpe_type	= DAOS_PROP_PO_SVC_LIST,
 		.dpe_val_ptr	= NULL,
+	}, {
+		.dpe_type	= DAOS_PROP_PO_POLICY,
+		.dpe_val	= DAOS_MEDIA_POLICY_DEFAULT,
 	}
 };
 

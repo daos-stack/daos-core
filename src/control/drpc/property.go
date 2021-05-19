@@ -6,6 +6,7 @@
 package drpc
 
 // #include <daos_prop.h>
+// #include <daos/policy.h>
 import "C"
 
 const (
@@ -24,6 +25,8 @@ const (
 	PoolPropertyOwner = C.DAOS_PROP_PO_OWNER
 	// PoolPropertyOwnerGroup is the group that acts as the owner of the pool.
 	PoolPropertyOwnerGroup = C.DAOS_PROP_PO_OWNER_GROUP
+	// PoolPropertyPolicy is the tiering policy set for a pool
+	PoolPropertyPolicy = C.DAOS_PROP_PO_POLICY
 )
 
 const (
@@ -44,4 +47,15 @@ const (
 	PoolSelfHealingAutoExclude = C.DAOS_SELF_HEAL_AUTO_EXCLUDE
 	// PoolSelfHealingAutoRebuild sets the self-healing strategy to auto-rebuild.
 	PoolSelfHealingAutoRebuild = C.DAOS_SELF_HEAL_AUTO_REBUILD
+)
+
+type PoolPolicy uint32
+
+const (
+	// PoolPolicyDefault sets the pool's policy to default
+	PoolPolicyDefault PoolPolicy = C.DAOS_MEDIA_POLICY_DEFAULT
+	// PoolPolicyDefault sets the pool's policy to io_size
+	PoolPolicyIoSize PoolPolicy = C.DAOS_MEDIA_POLICY_IO_SIZE
+	// PoolPolicyDefault sets the pool's policy to write_intensivity
+	PoolPolicyWriteIntensivity PoolPolicy = C.DAOS_MEDIA_POLICY_WRITE_INTENSIVITY
 )

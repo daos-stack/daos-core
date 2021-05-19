@@ -1411,6 +1411,7 @@ help_hdlr(int argc, char *argv[], struct cmd_args_s *ap)
 		"	  list-cont\n"
 		"	  ls\n"
 		"	  query            query a pool\n"
+		"	  get-prop         list pool properties\n"
 		"	  stat             get pool statistics\n"
 		"	  list-attrs       list pool user-defined attributes\n"
 		"	  get-attr         get pool user-defined attribute\n"

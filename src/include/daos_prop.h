@@ -66,6 +66,10 @@ enum daos_pool_props {
 	 * The pool svc rank list.
 	 */
 	DAOS_PROP_PO_SVC_LIST,
+	/**
+	 * Media selection policy
+	 */
+	DAOS_PROP_PO_POLICY,
 	DAOS_PROP_PO_MAX,
 };
 

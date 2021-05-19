@@ -127,10 +127,19 @@ struct  _Mgmt__PoolCreateReq
    * NVMe size in bytes (manual config)
    */
   uint64_t nvmebytes;
+  /*
+   * tier placement policy (manual config)
+   */
+  uint32_t policy;
+  /*
+   * policy parameters (optional)
+   */
+  size_t n_policyparams;
+  uint32_t *policyparams;
 };
 #define MGMT__POOL_CREATE_REQ__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&mgmt__pool_create_req__descriptor) \
-    , (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string, 0,NULL, 0,NULL, 0, 0, 0, 0, 0,NULL, 0, 0 }
+    , (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string, (char *)protobuf_c_empty_string, 0,NULL, 0,NULL, 0, 0, 0, 0, 0,NULL, 0, 0, 0, 0,NULL }
 
 
 /*
@@ -161,10 +170,11 @@ struct  _Mgmt__PoolCreateResp
    * total NVMe allocated to pool
    */
   uint64_t nvme_bytes;
+  uint32_t policy;
 };
 #define MGMT__POOL_CREATE_RESP__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&mgmt__pool_create_resp__descriptor) \
-    , 0, 0,NULL, 0,NULL, 0, 0 }
+    , 0, 0,NULL, 0,NULL, 0, 0, 0 }
 
 
 /*

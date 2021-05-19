@@ -13,6 +13,7 @@
 #include <daos/dtx.h>
 #include <daos_security.h>
 #include <daos/cont_props.h>
+#include <daos/policy.h>
 
 daos_prop_t *
 daos_prop_alloc(uint32_t entries_nr)
@@ -268,6 +269,14 @@ daos_prop_valid(daos_prop_t *prop, bool pool, bool input)
 				prop->dpp_entries[i].dpe_str))
 				return false;
 			break;
+		case DAOS_PROP_PO_POLICY:
+			val = prop->dpp_entries[i].dpe_val;
+			if (val >= DAOS_MEDIA_POLICY_MAX) {
+				D_ERROR("invalid policy index "DF_U64"\n", val);
+				return false;
+			}
+			break;
+
 		case DAOS_PROP_PO_ACL:
 		case DAOS_PROP_CO_ACL:
 			acl_ptr = prop->dpp_entries[i].dpe_val_ptr;

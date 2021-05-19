@@ -318,6 +318,7 @@ pool_prop_default_copy(daos_prop_t *prop_def, daos_prop_t *prop)
 		case DAOS_PROP_PO_SPACE_RB:
 		case DAOS_PROP_PO_SELF_HEAL:
 		case DAOS_PROP_PO_RECLAIM:
+		case DAOS_PROP_PO_POLICY:
 			entry_def->dpe_val = entry->dpe_val;
 			break;
 		case DAOS_PROP_PO_ACL:
@@ -415,6 +416,14 @@ pool_prop_write(struct rdb_tx *tx, const rdb_path_t *kvs, daos_prop_t *prop)
 			d_iov_set(&value, &entry->dpe_val,
 				     sizeof(entry->dpe_val));
 			rc = rdb_tx_update(tx, kvs, &ds_pool_prop_reclaim,
+					   &value);
+			if (rc)
+				return rc;
+			break;
+		case DAOS_PROP_PO_POLICY:
+			d_iov_set(&value, &entry->dpe_val,
+				     sizeof(entry->dpe_val));
+			rc = rdb_tx_update(tx, kvs, &ds_pool_prop_policy,
 					   &value);
 			if (rc)
 				return rc;
@@ -1596,6 +1605,8 @@ pool_prop_read(struct rdb_tx *tx, const struct pool_svc *svc, uint64_t bits,
 		nr++;
 	if (bits & DAOS_PO_QUERY_PROP_SVC_LIST)
 		nr++;
+	if (bits & DAOS_PO_QUERY_PROP_POLICY)
+		nr++;
 	if (nr == 0)
 		return 0;
 
@@ -1720,6 +1731,17 @@ pool_prop_read(struct rdb_tx *tx, const struct pool_svc *svc, uint64_t bits,
 		}
 		prop->dpp_entries[idx].dpe_type = DAOS_PROP_PO_SVC_LIST;
 		prop->dpp_entries[idx].dpe_val_ptr = svc_list;
+		idx++;
+	}
+	if (bits & DAOS_PO_QUERY_PROP_POLICY) {
+		d_iov_set(&value, &val, sizeof(val));
+		rc = rdb_tx_lookup(tx, &svc->ps_root, &ds_pool_prop_policy,
+				   &value);
+		if (rc != 0)
+			return rc;
+		D_ASSERT(idx < nr);
+		prop->dpp_entries[idx].dpe_type = DAOS_PROP_PO_POLICY;
+		prop->dpp_entries[idx].dpe_val = val;
 		idx++;
 	}
 
@@ -2810,6 +2832,7 @@ ds_pool_query_handler(crt_rpc_t *rpc)
 			case DAOS_PROP_PO_SPACE_RB:
 			case DAOS_PROP_PO_SELF_HEAL:
 			case DAOS_PROP_PO_RECLAIM:
+			case DAOS_PROP_PO_POLICY:
 				if (entry->dpe_val != iv_entry->dpe_val) {
 					D_ERROR("type %d mismatch "DF_U64" - "
 						DF_U64".\n", entry->dpe_type,
