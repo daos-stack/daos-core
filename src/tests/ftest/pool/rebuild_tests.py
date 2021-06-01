@@ -4,7 +4,9 @@
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 """
-from apricot import TestWithServers, skipForTicket
+
+import threading
+from apricot import TestWithServers
 
 
 class RebuildTests(TestWithServers):
@@ -63,6 +65,8 @@ class RebuildTests(TestWithServers):
             self.container[index].write_objects(rank, obj_class)
 
         # Determine how many objects will need to be rebuilt
+        # and create threads for wait_for_rebuild start
+        threads = []
         for index in range(pool_quantity):
             target_rank_lists = self.container[index].get_target_rank_lists(
                 " prior to rebuild")
@@ -81,6 +85,11 @@ class RebuildTests(TestWithServers):
                 self.container[index].object_qty.value *
                 self.container[index].record_qty.value,
                 self.container[index], rank)
+            self.log.info(
+                " ..construct thread # %s for wait_for_rebuild start", index)
+            thread = threading.Thread(
+                target=self.pool[index].wait_for_rebuild(True))
+            threads.append(thread)
 
         # Manually exclude the specified rank
         for index in range(pool_quantity):
@@ -90,8 +99,10 @@ class RebuildTests(TestWithServers):
                 self.pool[index].exclude([rank], self.d_log)
 
         # Wait for recovery to start
-        for index in range(pool_quantity):
-            self.pool[index].wait_for_rebuild(True)
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
 
         # Wait for recovery to complete
         for index in range(pool_quantity):
@@ -134,7 +145,6 @@ class RebuildTests(TestWithServers):
         """
         self.run_rebuild_test(1)
 
-    @skipForTicket("DAOS-7050, DAOS-7134")
     def test_multipool_rebuild(self):
         """JIRA ID: DAOS-XXXX (Rebuild-002).
 
