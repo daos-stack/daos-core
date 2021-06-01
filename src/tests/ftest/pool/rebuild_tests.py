@@ -4,8 +4,8 @@
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 """
-from apricot import TestWithServers, skipForTicket
-
+from apricot import TestWithServers
+from test_utils_pool import TestPool
 
 class RebuildTests(TestWithServers):
     """Test class for rebuild tests.
@@ -15,6 +15,15 @@ class RebuildTests(TestWithServers):
 
     :avocado: recursive
     """
+
+    def create_pool_obj(self):
+        """Create a TestPool object to use with ior."""
+        # Get the pool params
+        pool = TestPool(self.context, self.get_dmg_command(),
+                        daos_command=self.get_daos_command())
+        pool.get_params(self)
+
+        return pool
 
     def run_rebuild_test(self, pool_quantity):
         """Run the rebuild test for the specified number of pools.
@@ -26,7 +35,7 @@ class RebuildTests(TestWithServers):
         self.pool = []
         self.container = []
         for _ in range(pool_quantity):
-            self.pool.append(self.get_pool(create=False))
+            self.pool.append(self.create_pool_obj())
             self.container.append(
                 self.get_container(self.pool[-1], create=False))
         rank = self.params.get("rank", "/run/testparams/*")
@@ -82,16 +91,13 @@ class RebuildTests(TestWithServers):
                 self.container[index].record_qty.value,
                 self.container[index], rank)
 
-        # Manually exclude the specified rank
-        for index in range(pool_quantity):
-            if index == 0:
-                self.server_managers[0].stop_ranks([rank], self.d_log, True)
-            else:
-                self.pool[index].exclude([rank], self.d_log)
+        # pool version before stopping rank
+        pver_begin = []
+        for idx in range(pool_quantity):
+            pver_begin.append(self.pool[idx].get_pool_version())
 
-        # Wait for recovery to start
-        for index in range(pool_quantity):
-            self.pool[index].wait_for_rebuild(True)
+        # Stop desired rank
+        self.server_managers[0].stop_ranks([rank], self.d_log, True)
 
         # Wait for recovery to complete
         for index in range(pool_quantity):
@@ -103,7 +109,8 @@ class RebuildTests(TestWithServers):
             status &= self.pool[index].check_pool_info(
                 pi_nnodes=server_count * engine_count,
                 pi_ntargets=server_count * engine_count * target_count,
-                pi_ndisabled=target_count
+                pi_ndisabled=target_count,
+                pi_map_ver=">{}".format(pver_begin[index])
             )
             status &= self.pool[index].check_rebuild_status(
                 rs_done=1, rs_obj_nr=rs_obj_nr[index],
@@ -134,7 +141,6 @@ class RebuildTests(TestWithServers):
         """
         self.run_rebuild_test(1)
 
-    @skipForTicket("DAOS-7050, DAOS-7134")
     def test_multipool_rebuild(self):
         """JIRA ID: DAOS-XXXX (Rebuild-002).
 
