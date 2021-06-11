@@ -251,10 +251,10 @@ err:
 static void
 df_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name, mode_t mode)
 {
-	struct dfuse_projection_info	*fs_handle = fuse_req_userdata(req);
-	struct dfuse_inode_entry	*parent_inode = NULL;
-	d_list_t			*rlink;
-	int				rc;
+	struct dfuse_projection_info    *fs_handle = fuse_req_userdata(req);
+	struct dfuse_inode_entry        *parent_inode = NULL;
+	d_list_t                        *rlink;
+	int                             rc;
 
 	rlink = d_hash_rec_find(&fs_handle->dpi_iet, &parent, sizeof(parent));
 	if (!rlink) {
@@ -662,6 +662,26 @@ struct dfuse_inode_ops dfuse_dfs_ops = {
 	.create		= dfuse_cb_create,
 	.rename		= dfuse_cb_rename,
 	.symlink	= dfuse_cb_symlink,
+	.setxattr	= dfuse_cb_setxattr,
+	.getxattr	= dfuse_cb_getxattr,
+	.listxattr	= dfuse_cb_listxattr,
+	.removexattr	= dfuse_cb_removexattr,
+	.setattr	= dfuse_cb_setattr,
+	.statfs		= dfuse_cb_statfs,
+};
+
+/* Operations for root/multi-user container
+ *
+ * The only write operations are mknod/setattr.
+ */
+struct dfuse_inode_ops dfuse_login_ops = {
+	.lookup		= dfuse_cb_lookup,
+	.mknod		= dfuse_cb_mknod_with_id,
+	.opendir	= dfuse_cb_opendir,
+	.releasedir	= dfuse_cb_releasedir,
+	.getattr	= dfuse_cb_getattr,
+	.unlink		= dfuse_cb_unlink,
+	.rename		= dfuse_cb_rename,
 	.setxattr	= dfuse_cb_setxattr,
 	.getxattr	= dfuse_cb_getxattr,
 	.listxattr	= dfuse_cb_listxattr,

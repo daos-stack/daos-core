@@ -223,8 +223,11 @@ show_help(char *name)
 	printf("usage: %s -m=PATHSTR -s=RANKS\n"
 		"\n"
 		"	-m --mountpoint=PATHSTR	Mount point to use\n"
+		"	   --pool=UUID		pool UUID\n"
+		"	   --container=UUID	container UUID\n"
 		"	   --pool=<name>	pool UUID/label\n"
 		"	   --container=<name>	container UUID/label\n"
+		"          --multi-user         Allow multiple users\n"
 		"	   --sys-name=STR	DAOS system name context for servers\n"
 		"	-S --singlethreaded	Single threaded\n"
 		"	-t --thread-count=COUNT Number of fuse threads to use\n"
@@ -256,6 +259,7 @@ main(int argc, char **argv)
 		{"container",		required_argument, 0, 'c'},
 		{"sys-name",		required_argument, 0, 'G'},
 		{"mountpoint",		required_argument, 0, 'm'},
+		{"multi-user",		no_argument,	   0, 'M'},
 		{"thread-count",	required_argument, 0, 't'},
 		{"singlethread",	no_argument,	   0, 'S'},
 		{"disable-caching",	no_argument,	   0, 'A'},
@@ -303,6 +307,9 @@ main(int argc, char **argv)
 			break;
 		case 'm':
 			dfuse_info->di_mountpoint = optarg;
+			break;
+		case 'M':
+			dfuse_info->di_multi_user = true;
 			break;
 		case 'S':
 			/* Set it to be single threaded, but allow an extra one
@@ -369,6 +376,11 @@ main(int argc, char **argv)
 		if ((dfuse_info->di_cont) &&
 			(uuid_parse(dfuse_info->di_cont, cont_uuid) < 0))
 			have_cont_label = true;
+	}
+
+	if (dfuse_info->di_multi_user && !dfuse_info->di_cont) {
+		printf("Multi-user mode requires a container uuid\n");
+		exit(1);
 	}
 
 	if (!dfuse_info->di_foreground) {
@@ -461,6 +473,9 @@ main(int argc, char **argv)
 			D_GOTO(out_dfs, ret = daos_errno2der(rc));
 		}
 	}
+
+	if (dfuse_info->di_multi_user)
+		dfs->dfs_multi_user = true;
 
 	/* The container created by dfuse_cont_open() will have taken a ref
 	 * on the pool, so drop the initial one.

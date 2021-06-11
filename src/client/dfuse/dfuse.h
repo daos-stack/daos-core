@@ -33,6 +33,7 @@ struct dfuse_info {
 	bool				di_threaded;
 	bool				di_foreground;
 	bool				di_caching;
+	bool				di_multi_user;
 	bool				di_wb_cache;
 };
 
@@ -147,6 +148,7 @@ struct dfuse_event {
 };
 
 extern struct dfuse_inode_ops dfuse_dfs_ops;
+extern struct dfuse_inode_ops dfuse_login_ops;
 extern struct dfuse_inode_ops dfuse_cont_ops;
 extern struct dfuse_inode_ops dfuse_pool_ops;
 
@@ -214,6 +216,7 @@ struct dfuse_cont {
 	bool			dfc_data_caching;
 	bool			dfc_direct_io_disable;
 	pthread_mutex_t		dfs_read_mutex;
+	bool			dfs_multi_user;
 };
 
 void
@@ -245,6 +248,17 @@ dfuse_pool_connect(struct dfuse_projection_info *fs_handle, uuid_t *pool,
  * or directly though dfs/daos but not through dfuse.
  */
 #define DFUSE_XATTR_PREFIX "user.dfuse"
+
+/* Multiuser support */
+#define DFUSE_XID_XATTR_NAME "user.dfuse.ids"
+
+struct uid_entry {
+	uid_t uid;
+	gid_t gid;
+};
+
+int
+dfuse_get_uid(struct dfuse_inode_entry *ie);
 
 /* dfuse_core.c */
 
@@ -555,7 +569,7 @@ dfuse_compute_inode(struct dfuse_cont *dfs,
 	*_ino = hi ^ (oid->lo << 32);
 };
 
-extern char *duns_xattr_name;
+extern char *dfuse_xattr_names[];
 
 int
 check_for_uns_ep(struct dfuse_projection_info *fs_handle,
@@ -584,6 +598,10 @@ dfuse_cb_readlink(fuse_req_t, fuse_ino_t);
 void
 dfuse_cb_mknod(fuse_req_t, struct dfuse_inode_entry *,
 	       const char *, mode_t);
+
+void
+dfuse_cb_mknod_with_id(fuse_req_t, struct dfuse_inode_entry *,
+		       const char *, mode_t);
 
 void
 dfuse_cb_opendir(fuse_req_t, struct dfuse_inode_entry *,
@@ -664,8 +682,8 @@ void
 dfuse_reply_entry(struct dfuse_projection_info *fs_handle,
 		  struct dfuse_inode_entry *inode,
 		  struct fuse_file_info *fi_out,
-		  bool is_new,
-		  fuse_req_t req);
+		  fuse_req_t req,
+		  bool have_uid);
 
 /* dfuse_cont.c */
 void
