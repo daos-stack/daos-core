@@ -701,6 +701,65 @@ pipeline {
                 expression { ! skipStage() }
             }
             parallel {
+                stage('Test on CentOS 7 [in] Vagrant'){
+                    when {
+                        beforeAgent true
+                        expression { ! skipStage() }
+                    }
+                    agent {
+                        label 'ci_nlt_1'
+                    }
+                    steps {
+                        provisionNodes NODELIST: env.NODELIST,
+                                       node_count: 1,
+                                       distro: 'fedora33'
+                        sh label: "Set up Vangrant host",
+                           script: 'NODE=' + env.NODELIST + ' '                 +
+                                   'NFS_SERVER=${NFS_SERVER:-${HOSTNAME%%.*}} ' +
+                                   'ci/vagrant/node_setup.sh'
+                        sh label: "Start Vagrant cluster",
+                           script: 'NODE=' + env.NODELIST + ' '       +
+                                   'DISTRO="EL_7" '                   +
+                                   'ci/vagrant/main.sh start-vagrant'
+                        sh label: "Get Vagrant status",
+                           script: 'NODE=' + env.NODELIST + ' '       +
+                                   'ci/vagrant/main.sh vagrant-status'
+                        sh label: "Configure Vagrant nodes",
+                           script: 'NODE=' + env.NODELIST + ' '                            +
+                                   'DISTRO="EL_7" '                                        +
+                                   'NODESTRING="vm1,vm2,vm3" '                             +
+                                   'INST_REPOS="' + daosRepos('centos7') + '" '            +
+                                   'INST_RPMS="' + functionalPackages(1,
+                                                                      next_version) + '" ' +
+                                   'ci/vagrant/main.sh config-vagrant-nodes'
+                        sh label: "Run tests on Vagrant nodes",
+                           script: 'NODE=' + env.NODELIST + ' '                        +
+                                   'TEST_TAG="' + commitPragma("Test-tag-vagrant",
+                                                               'basic,hw,-ib2') + '" ' +
+                                   'NODESTRING="vm1,vm2,vm3" '                         +
+                                   'NODE_COUNT=3 '                                     +
+                                   'ci/vagrant/main.sh run-tests'
+                    }
+                    post {
+                        always {
+                            sh 'ssh -i ci_key jenkins@' + env.NODELIST +
+                              ''' "cd $PWD
+                                   vagrant destroy -f
+                                   if grep \\"Host vm1\\" ~/.ssh/config; then
+                                       echo \\"vagrant destroy did not clean up .ssh/config\\"
+                                       exit 1
+                                   fi"'''
+                        }
+                        unsuccessful {
+                            sh 'ssh -i ci_key jenkins@' + env.NODELIST +
+                              ''' "cd $PWD
+                                   vagrant status
+                                   sudo virsh net-list || true
+                                   ifconfig -a || true
+                                   brctl show || true"'''
+                        }
+                    }
+                }
                 stage('Coverity on CentOS 7') {
                     when {
                         beforeAgent true

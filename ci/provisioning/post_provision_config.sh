@@ -1,6 +1,7 @@
 #!/bin/bash
 
-set -eux
+# shellcheck source=ci/common.sh
+. ci/common.sh
 
 rm -f ci_key*
 ssh-keygen -N "" -f ci_key
@@ -12,28 +13,36 @@ host wolf-*
     LogLevel error
 EOF
 
-DSL_REPO_var="DAOS_STACK_${DISTRO}_LOCAL_REPO"
-DSG_REPO_var="DAOS_STACK_${DISTRO}_GROUP_REPO"
+DSL_REPO_var="DAOS_STACK_$(toupper "$DISTRO")_LOCAL_REPO"
+DSG_REPO_var="DAOS_STACK_$(toupper "$DISTRO")_GROUP_REPO"
 
 clush -B -l root -w "$NODESTRING" -c ci_key* --dest=/tmp/
 
 time clush -B -S -l root -w "$NODESTRING" \
-           "MY_UID=$(id -u)
-           CONFIG_POWER_ONLY=$CONFIG_POWER_ONLY
-           INST_REPOS=\"$INST_REPOS\"
-           INST_RPMS=\$(eval echo $INST_RPMS)
-           GPG_KEY_URLS=\"$GPG_KEY_URLS\"
-           REPOSITORY_URL=\"$REPOSITORY_URL\"
-           JENKINS_URL=\"$JENKINS_URL\"
-           DAOS_STACK_LOCAL_REPO=\"${!DSL_REPO_var}\"
-           DAOS_STACK_GROUP_REPO=\"${!DSG_REPO_var:-}\"
-           DISTRO=\"$DISTRO\"
-           $(cat ci/provisioning/post_provision_config_nodes_"${DISTRO}".sh)
-           $(cat ci/provisioning/post_provision_config_nodes.sh)"
+       "MY_UID=$(id -u)
+        CONFIG_POWER_ONLY=${CONFIG_POWER_ONLY:-false}
+        INST_REPOS=\"$INST_REPOS\"
+        INST_RPMS=\$(eval echo $INST_RPMS)
+        GPG_KEY_URLS=\"$GPG_KEY_URLS\"
+        REPOSITORY_URL=\"$REPOSITORY_URL\"
+        JENKINS_URL=\"$JENKINS_URL\"
+        DAOS_STACK_LOCAL_REPO=\"${!DSL_REPO_var:-}\"
+        DAOS_STACK_GROUP_REPO=\"${!DSG_REPO_var:-}\"
+        DISTRO=\"$(toupper "$DISTRO")\"
+        FOR_DAOS=${FOR_DAOS:-true}
+        REMOTE_ACCT=\"${REMOTE_ACCT:-jenkins}\"
+        $(cat ci/provisioning/post_provision_config_nodes_"${DISTRO}".sh)
+        $(cat ci/provisioning/post_provision_config_nodes.sh)" || exit 1
 
-git log --format=%s -n 1 HEAD | ssh -i ci_key -l jenkins "${NODELIST%%,*}" \
-                                    "cat >/tmp/commit_title"
-git log --pretty=format:%h --abbrev-commit --abbrev=7 |
-  ssh -i ci_key -l jenkins "${NODELIST%%,*}" "cat >/tmp/commit_list"
-ssh root@"${NODELIST%%,*}" "mkdir /scratch && " \
-                           "mount wolf-2:/export/scratch /scratch"
+if [ -d .git ]; then
+    git log --format=%s -n 1 HEAD |
+      ssh -i ci_key -l "${REMOTE_ACCT:-jenkins}" "${NODESTRING%%,*}" \
+      "cat >/tmp/commit_title"
+    git log --pretty=format:%h --abbrev-commit --abbrev=7 |
+      ssh -i ci_key -l "${REMOTE_ACCT:-jenkins}" "${NODESTRING%%,*}" \
+      "cat >/tmp/commit_list"
+    if [ "${SKIPLIST_MOUNT-x}" != "x" ]; then
+        ssh root@"${NODESTRING%%,*}" "mkdir /scratch && " \
+                                   "mount wolf-2:/export/scratch /scratch"
+    fi
+fi

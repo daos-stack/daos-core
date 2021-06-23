@@ -2,6 +2,7 @@
 
 REPOS_DIR=/etc/dnf/repos.d
 DISTRO_NAME=leap15
+LSB_RELEASE=lsb-release
 EXCLUDE_UPGRADE=fuse,fuse-libs,fuse-devel,mercury,daos,daos-\*
 
 bootstrap_dnf() {
@@ -82,10 +83,25 @@ post_provision_config_nodes() {
     rm -f /etc/profile.d/openmpi.sh
     rm -f /tmp/daos_control.log
 
+    if ! rpm -q "$LSB_RELEASE"; then
+        time dnf -y install "$LSB_RELEASE"
+    fi
+
+    n=3
+    rc=0
+    # shellcheck disable=SC2001
     # shellcheck disable=SC2086
-    if [ -n "$INST_RPMS" ] &&
-       ! time dnf -y install $INST_RPMS; then
+    if ! rpm -q "$(echo "$INST_RPMS" |
+                   sed -e 's/--exclude [^ ]*//'                 \
+                       -e 's/[^ ]*-daos-[0-9][0-9]*//g')"; then
+        while [ -n "$INST_RPMS" ] &&
+              [ $n -gt 0 ] &&
+              ! time dnf -y install $INST_RPMS; do
         rc=${PIPESTATUS[0]}
+            (( n-- ))
+        done
+    fi
+    if [ "$rc" -ne 0 ]; then
         dump_repos
         exit "$rc"
     fi

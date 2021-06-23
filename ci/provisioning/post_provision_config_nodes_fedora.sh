@@ -1,35 +1,12 @@
 #!/bin/bash
 
 REPOS_DIR=/etc/yum.repos.d
-DISTRO_NAME=centos7
+DISTRO_NAME=fedora
 LSB_RELEASE=redhat-lsb-core
 EXCLUDE_UPGRADE=fuse,mercury,daos,daos-\*
 
-timeout_yum() {
-    local timeout="$1"
-    shift
-
-    # now make sure everything is fully up-to-date
-    local tries=3
-    while [ $tries -gt 0 ]; do
-        if time timeout "$timeout" yum -y "$@"; then
-            # succeeded, return with success
-            return 0
-        fi
-        if [ "${PIPESTATUS[0]}" = "124" ]; then
-            # timed out, try again
-            (( tries-- ))
-            continue
-        fi
-        # yum failed for something other than timeout
-        return 1
-    done
-
-    return 1
-}
-
 bootstrap_dnf() {
-    timeout_yum 5m install dnf 'dnf-command(config-manager)'
+    :
 }
 
 group_repo_post() {
@@ -38,62 +15,7 @@ group_repo_post() {
 }
 
 distro_custom() {
-    if [ ! -e /usr/bin/pip3 ] &&
-       [ -e /usr/bin/pip3.6 ]; then
-        ln -s pip3.6 /usr/bin/pip3
-    fi
-    if [ ! -e /usr/bin/python3 ] &&
-       [ -e /usr/bin/python3.6 ]; then
-        ln -s python3.6 /usr/bin/python3
-    fi
-
-    # install the debuginfo repo in case we get segfaults
-    cat <<"EOF" > $REPOS_DIR/CentOS-Debuginfo.repo
-[core-0-debuginfo]
-name=CentOS-7 - Debuginfo
-baseurl=http://debuginfo.centos.org/7/$basearch/
-gpgcheck=1
-gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-Debug-7
-enabled=0
-EOF
-
-    # force install of avocado 69.x
-    dnf -y erase avocado{,-common}                                              \
-                 python2-avocado{,-plugins-{output-html,varianter-yaml-to-mux}} \
-                 python36-PyYAML
-    pip3 install --upgrade pip
-    pip3 install "avocado-framework<70.0"
-    pip3 install "avocado-framework-plugin-result-html<70.0"
-    pip3 install "avocado-framework-plugin-varianter-yaml-to-mux<70.0"
-    pip3 install clustershell
-
-    # Mellanox OFED hack
-    if ls -d /usr/mpi/gcc/openmpi-*; then
-        cat <<EOF > /etc/modulefiles/mpi/mlnx_openmpi-x86_64
-#%Module 1.0
-#
-#  OpenMPI module for use with 'environment-modules' package:
-#
-conflict		mpi
-prepend-path 		PATH 		/usr/mpi/gcc/openmpi-4.1.0rc5/bin
-prepend-path 		LD_LIBRARY_PATH /usr/mpi/gcc/openmpi-4.1.0rc5/lib64
-prepend-path 		PKG_CONFIG_PATH	/usr/mpi/gcc/openmpi-4.1.0rc5/lib64/pkgconfig
-prepend-path		PYTHONPATH	/usr/lib64/python2.7/site-packages/openmpi
-prepend-path		MANPATH		/usr/mpi/gcc/openmpi-4.1.0rc5/share/man
-setenv 			MPI_BIN		/usr/mpi/gcc/openmpi-4.1.0rc5/bin
-setenv			MPI_SYSCONFIG	/usr/mpi/gcc/openmpi-4.1.0rc5/etc
-setenv			MPI_FORTRAN_MOD_DIR	/usr/mpi/gcc/openmpi-4.1.0rc5/lib64
-setenv			MPI_INCLUDE	/usr/mpi/gcc/openmpi-4.1.0rc5/include
-setenv	 		MPI_LIB		/usr/mpi/gcc/openmpi-4.1.0rc5/lib64
-setenv			MPI_MAN			/usr/mpi/gcc/openmpi-4.1.0rc5/share/man
-setenv			MPI_PYTHON_SITEARCH	/usr/lib64/python2.7/site-packages/openmpi
-setenv			MPI_PYTHON2_SITEARCH	/usr/lib64/python2.7/site-packages/openmpi
-setenv			MPI_COMPILER	openmpi-x86_64
-setenv			MPI_SUFFIX	_openmpi
-setenv	 		MPI_HOME	/usr/mpi/gcc/openmpi-4.1.0rc5
-EOF
-    fi
-
+    :
 }
 
 post_provision_config_nodes() {
@@ -114,7 +36,8 @@ post_provision_config_nodes() {
 
     time dnf repolist
     # the group repo is always on the test image
-    #add_group_repo
+    # not for fedora though
+    add_group_repo
     add_local_repo
     time dnf repolist
 

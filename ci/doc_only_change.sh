@@ -16,6 +16,6 @@ fi
 # The fetch of $TARGET_BRANCH gets the branch for the compare as a commit hash
 # with the temporary name FETCH_HEAD.
 git fetch origin "${TARGET_BRANCH}"
-git diff-tree --no-commit-id --name-only                                \
+git diff-tree --no-commit-id --name-only       \
   "$(git merge-base "FETCH_HEAD" HEAD)" HEAD | \
   grep -v -e "^doc$"
