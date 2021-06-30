@@ -399,6 +399,11 @@ crt_init_opt(crt_group_id_t grpid, uint32_t flags, crt_init_options_t *opt)
 				addr_env);
 		}
 
+		if (strcmp(addr_env, "ofi+sockets") == 0) {
+			D_INFO("Overriding to use ofi+tcp;ofi_rxm\n");
+			addr_env = "ofi+tcp;ofi_rxm";
+		}
+
 		provider_found = false;
 		for (plugin_idx = 0; crt_na_dict[plugin_idx].nad_str != NULL;
 		     plugin_idx++) {
@@ -459,7 +464,7 @@ do_init:
 
 			srx_env = getenv("FI_OFI_RXM_USE_SRX");
 			if (srx_env == NULL) {
-				D_WARN("FI_OFI_RXM_USE_SRX not set, set=1\n");
+				D_INFO("FI_OFI_RXM_USE_SRX not set, set=1\n");
 				setenv("FI_OFI_RXM_USE_SRX", "1", true);
 			}
 		}
