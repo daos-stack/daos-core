@@ -15,7 +15,12 @@ class DaosVol(VolTestBase):
     :avocado: recursive
     """
 
-    CANCEL_FOR_TICKET = [["DAOS-7888", "testname", "h5_test_testhdf5"]]
+    def setUp(self):
+        """Set up before each test."""
+        # Create unique logs per test variant
+        testname = self.params.get("testname")
+        self.update_log_file_names("_".join([self.test_id, testname]))
+        super().setUp()
 
     def test_daos_vol_mpich(self):
         """Jira ID: DAOS-3656.
