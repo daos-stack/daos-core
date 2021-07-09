@@ -123,6 +123,7 @@ type RASEvent struct {
 	Msg          string          `json:"msg"`
 	Hostname     string          `json:"hostname"`
 	Rank         uint32          `json:"rank"`
+	RankInc      uint64          `json:"rank_inc"`
 	HWID         string          `json:"hw_id"`
 	ProcID       uint64          `json:"proc_id"`
 	ThreadID     uint64          `json:"thread_id"`
@@ -135,6 +136,12 @@ type RASEvent struct {
 
 	forwarded   atm.Bool
 	forwardable atm.Bool
+}
+
+// GetTimestamp returns a time.Time parsed from the event
+// timestamp.
+func (evt *RASEvent) GetTimestamp() (time.Time, error) {
+	return common.ParseTime(evt.Timestamp)
 }
 
 // IsForwarded returns true if event has been forwarded between hosts.

@@ -87,6 +87,7 @@ type JoinRequest struct {
 	FabricURI      string
 	FabricContexts uint32
 	FaultDomain    *FaultDomain
+	RankInc        uint64
 }
 
 // JoinResponse contains information returned from join membership update.
@@ -130,6 +131,9 @@ func (m *Membership) Join(req *JoinRequest) (resp *JoinResponse, err error) {
 		if curMember.UUID != req.UUID {
 			return nil, errUuidChanged(req.UUID, curMember.UUID, curMember.Rank)
 		}
+		if curMember.Incarnation > req.RankInc {
+			return nil, errStaleIncarn(req.RankInc, curMember.Incarnation, curMember.Rank)
+		}
 
 		if !curMember.FaultDomain.Equals(req.FaultDomain) {
 			m.log.Infof("fault domain for rank %d changed from %q to %q",
@@ -145,6 +149,7 @@ func (m *Membership) Join(req *JoinRequest) (resp *JoinResponse, err error) {
 		curMember.FabricURI = req.FabricURI
 		curMember.FabricContexts = req.FabricContexts
 		curMember.FaultDomain = req.FaultDomain
+		curMember.Incarnation = req.RankInc
 		if err := m.db.UpdateMember(curMember); err != nil {
 			return nil, err
 		}
@@ -174,6 +179,7 @@ func (m *Membership) Join(req *JoinRequest) (resp *JoinResponse, err error) {
 		FabricContexts: req.FabricContexts,
 		FaultDomain:    req.FaultDomain,
 		state:          MemberStateJoined,
+		Incarnation:    req.RankInc,
 	}
 	if err := m.db.AddMember(newMember); err != nil {
 		return nil, errors.Wrap(err, "failed to add new member")
@@ -470,7 +476,10 @@ func (m *Membership) CheckHosts(hosts string, ctlPort int) (*RankSet, *hostlist.
 
 // MarkRankDead is a helper method to mark a rank as dead in response to a
 // swim_rank_dead event.
-func (m *Membership) MarkRankDead(rank Rank) error {
+func (m *Membership) MarkRankDead(rank Rank, eventIncarnation uint64) error {
+	m.Lock()
+	defer m.Unlock()
+
 	member, err := m.db.FindMemberByRank(rank)
 	if err != nil {
 		return err
@@ -488,11 +497,19 @@ func (m *Membership) MarkRankDead(rank Rank) error {
 		return errors.New(msg)
 	}
 
+	if member.Incarnation > eventIncarnation {
+		return errors.Errorf("stale event (inc %d < %d)", eventIncarnation, member.Incarnation)
+	}
+
+	m.log.Infof("marking rank %d as %s in response to rank dead event", rank, ns)
 	member.state = ns
 	return m.db.UpdateMember(member)
 }
 
 func (m *Membership) handleEngineFailure(evt *events.RASEvent) {
+	m.Lock()
+	defer m.Unlock()
+
 	ei := evt.GetEngineStateInfo()
 	if ei == nil {
 		m.log.Error("no extended info in EngineDied event received")
@@ -531,8 +548,6 @@ func (m *Membership) OnEvent(_ context.Context, evt *events.RASEvent) {
 	switch evt.ID {
 	case events.RASEngineDied:
 		m.handleEngineFailure(evt)
-	default:
-		m.log.Debugf("no handler registered for event: %v", evt)
 	}
 }
 
