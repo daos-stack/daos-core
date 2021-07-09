@@ -835,3 +835,62 @@ func (svc *mgmtSvc) SystemErase(ctx context.Context, pbReq *mgmtpb.SystemEraseRe
 	svc.eraseAndRestart(true)
 	return pbResp, nil
 }
+
+// SystemCleanup implements the method defined for the Management Service.
+//
+// Signal to the data plane to find all resources associted with a given machine
+// and release them. This includes releasing all container and pool handles associated
+// with the machine.
+//
+func (svc *mgmtSvc) SystemCleanup(ctx context.Context, req *mgmtpb.SystemCleanupReq) (*mgmtpb.SystemCleanupResp, error) {
+	if err := svc.checkReplicaRequest(req); err != nil {
+		return nil, err
+	}
+	svc.log.Debugf("Received SystemCleanup RPC: %+v", req)
+
+	if req.Machine == "" {
+		return nil, errors.New("SystemCleanup requires a machine name.")
+	}
+
+	if len(req.Machine) > 64 {
+		return nil, errors.New("Machine Name must be 64 characters or less.")
+	}
+
+	psList, err := svc.sysdb.PoolServiceList()
+	if err != nil {
+		return nil, err
+	}
+
+	resp := new(mgmtpb.SystemCleanupResp)
+	evictReq := new(mgmtpb.PoolEvictReq)
+
+	evictReq.Sys = req.Sys
+	evictReq.Machine = req.Machine
+
+	for _, ps := range psList {
+		// Use our incoming request and just replace the uuid on each iteration
+		evictReq.Uuid = ps.PoolUUID.String()
+
+		dresp, err := svc.makePoolServiceCall(ctx, drpc.MethodPoolEvict, evictReq)
+		if err != nil {
+			return nil, err
+		}
+
+		res := &mgmtpb.PoolEvictResp{}
+		if err = proto.Unmarshal(dresp.Body, res); err != nil {
+			return nil, errors.Wrap(err, "unmarshal PoolEvict response")
+		}
+
+		if res.Status != int32(drpc.DaosSuccess) {
+			return nil, errors.Errorf("Unable to clean up handles for machine %s on pool %s", evictReq.Machine, evictReq.Uuid)
+		}
+		resp.Pools = append(resp.Pools, &mgmtpb.SystemCleanupResp_Pool{
+			Uuid:  evictReq.Uuid,
+			Count: uint32(res.Count),
+		})
+	}
+
+	svc.log.Debugf("Responding to SystemCleanup RPC: %+v", resp)
+
+	return resp, nil
+}

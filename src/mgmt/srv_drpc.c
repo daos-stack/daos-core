@@ -427,8 +427,10 @@ ds_mgmt_drpc_pool_evict(Drpc__Call *drpc_req, Drpc__Response *drpc_resp)
 	Mgmt__PoolEvictReq	*req = NULL;
 	Mgmt__PoolEvictResp	 resp = MGMT__POOL_EVICT_RESP__INIT;
 	uuid_t			 uuid;
-	uuid_t			*handles;
-	int			 n_handles;
+	uuid_t			*handles = NULL;
+	int			 n_handles = 0;
+	char			*machine = NULL;
+	uint32_t		 count = 0;
 	d_rank_list_t		*svc_ranks = NULL;
 	uint8_t			*body;
 	size_t			 len;
@@ -475,12 +477,12 @@ ds_mgmt_drpc_pool_evict(Drpc__Call *drpc_req, Drpc__Response *drpc_resp)
 			}
 		}
 		n_handles = req->n_handles;
-	} else {
-		handles = NULL;
-		n_handles = 0;
+	} else {;
+		machine = req->machine;
 	}
 
-	rc = ds_mgmt_evict_pool(uuid, svc_ranks, handles, n_handles, req->sys);
+	rc = ds_mgmt_evict_pool(uuid, svc_ranks, handles, n_handles, machine,
+				req->sys, &count);
 
 	if (rc != 0) {
 		D_ERROR("Failed to evict pool connections %s: "DF_RC"\n",
@@ -493,6 +495,7 @@ out_free:
 
 out:
 	resp.status = rc;
+	resp.count = count;
 	len = mgmt__pool_evict_resp__get_packed_size(&resp);
 	D_ALLOC(body, len);
 	if (body == NULL) {
