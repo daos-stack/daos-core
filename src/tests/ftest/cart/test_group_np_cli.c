@@ -70,10 +70,13 @@ test_run(void)
 	int			 tag;
 	crt_endpoint_t		 server_ep = {0};
 	crt_rpc_t		*rpc_req = NULL;
-	int			 i;
+	int			 i, j, k;
 	int			 rc = 0;
 	uint32_t		*_cg_ranks;
 	int			 _cg_num_ranks;
+	int			 icea;
+	int			 scn;
+	sem_t			 ttp;
 
 	if (test_g.t_skip_init) {
 		DBG_PRINT("Skipping init stage.\n");
@@ -121,6 +124,14 @@ test_run(void)
 				       5,
 				       150);
 		D_ASSERTF(rc == 0, "wait_for_ranks() failed; rc=%d\n", rc);
+
+		crt_endpoint_t ep;
+		ep.ep_rank = rank_list->rl_ranks[0];
+		ep.ep_tag = 0;
+		ep.ep_grp = grp;
+		rc = crt_register_proto_ctl(&ep);
+		D_ASSERTF(rc == 0, "crt_register_proto_ctl() failed; rc=%d\n", rc);
+
 	}
 
 	if (test_g.t_init_only) {
@@ -144,14 +155,28 @@ test_run(void)
 
 			for (tag = 0; tag < test_g.t_srv_ctx_num; tag++) {
 				DBG_PRINT("Sending rpc to %d:%d\n", rank, tag);
-				check_in(grp, rank, tag);
+
+				k = test_g.t_num_checkins_to_send;
+				for (j = 0; j < k; j++) {
+					check_in_with_delay(grp,
+							    rank,
+							    tag);
+				}
 			}
 		}
 
+		/* Don't wait on the aborted rank */
+		icea = test_g.t_issue_crt_ep_abort;
+		scn = test_g.t_srv_ctx_num;
+		ttp = test_g.t_token_to_proceed;
 		for (i = 0; i < rank_list->rl_nr; i++) {
-			for (tag = 0; tag < test_g.t_srv_ctx_num; tag++) {
-				tc_sem_timedwait(&test_g.t_token_to_proceed, 61,
-						 __LINE__);
+			rank = rank_list->rl_ranks[i];
+			if (icea != rank) {
+				for (tag = 0; tag < scn; tag++) {
+						tc_sem_timedwait(&ttp,
+								 61,
+								 __LINE__);
+				}
 			}
 		}
 	}

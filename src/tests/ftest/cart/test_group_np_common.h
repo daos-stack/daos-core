@@ -11,9 +11,6 @@
 
 #define TEST_CTX_MAX_NUM	 (72)
 
-#define TEST_GROUP_BASE					0x010000000
-#define TEST_GROUP_VER					 0
-
 #define MAX_NUM_RANKS		1024
 #define MAX_SWIM_STATUSES	1024
 #define CRT_CTL_MAX_ARG_STR_LEN (1 << 16)
@@ -31,6 +28,9 @@ struct test_t {
 	char			*t_remote_group_name;
 	int			 t_hold;
 	int			 t_shut_only;
+	int			 t_issue_crt_ep_abort;
+	int			 t_sleep_time_after_rpc;
+	int			 t_num_checkins_to_send;
 	int			 t_init_only;
 	int			 t_skip_init;
 	int			 t_skip_shutdown;
@@ -52,6 +52,7 @@ struct test_t {
 	int			 t_roomno;
 	struct d_fault_attr_t	*t_fault_attr_1000;
 	struct d_fault_attr_t	*t_fault_attr_5000;
+	int			 global_client_cb_arg;
 };
 
 struct test_t test_g = { .t_hold_time = 0,
@@ -123,8 +124,8 @@ test_checkin_handler(crt_rpc_t *rpc_req)
 	rc = crt_reply_send(rpc_req);
 	D_ASSERTF(rc == 0, "crt_reply_send() failed. rc: %d\n", rc);
 
-	DBG_PRINT("tier1 test_srver sent checkin reply, ret: %d,"
-		  "  room_no: %d.\n", e_reply->ret, e_reply->room_no);
+	DBG_PRINT("tier1 test_server sent checkin reply, ret: %d, "
+		  " room_no: %d.\n", e_reply->ret, e_reply->room_no);
 }
 
 /* Track number of dead-alive swim status changes */
@@ -203,7 +204,7 @@ test_swim_status_handler(crt_rpc_t *rpc_req)
 	rc = crt_reply_send(rpc_req);
 	D_ASSERTF(rc == 0, "crt_reply_send() failed. rc: %d\n", rc);
 
-	DBG_PRINT("tier1 test_srver sent swim_status reply,"
+	DBG_PRINT("tier1 test_server sent swim_status reply,"
 		  "e_reply->bool_val: %d.\n",
 		  e_reply->bool_val);
 }
@@ -214,6 +215,7 @@ test_ping_delay_handler(crt_rpc_t *rpc_req)
 	struct crt_test_ping_delay_in	*p_req;
 	struct crt_test_ping_delay_out	*p_reply;
 	int				 rc = 0;
+	d_rank_t			 my_rank;
 
 	/* CaRT internally already allocated the input/output buffer */
 	p_req = crt_req_get(rpc_req);
@@ -222,8 +224,8 @@ test_ping_delay_handler(crt_rpc_t *rpc_req)
 	DBG_PRINT("tier1 test_server recv'd checkin, opc: %#x.\n",
 		  rpc_req->cr_opc);
 	DBG_PRINT("tier1 checkin input - age: %d, name: %s, days: %d, "
-			"delay: %u.\n", p_req->age, p_req->name, p_req->days,
-			 p_req->delay);
+		  "delay: %u.\n", p_req->age, p_req->name, p_req->days,
+		  p_req->delay);
 
 	p_reply = crt_reply_get(rpc_req);
 	D_ASSERTF(p_reply != NULL, "crt_reply_get() failed. p_reply: %p\n",
@@ -234,9 +236,22 @@ test_ping_delay_handler(crt_rpc_t *rpc_req)
 	sleep(p_req->delay);
 
 	rc = crt_reply_send(rpc_req);
-	D_ASSERTF(rc == 0, "crt_reply_send() failed. rc: %d\n", rc);
 
-	DBG_PRINT("tier1 test_srver sent checkin reply, ret: %d, "
+	/* Expect the reply on an aborted RPC to fail */
+	crt_group_rank(NULL, &my_rank);
+
+	if (test_g.t_issue_crt_ep_abort == my_rank) {
+		D_ASSERTF(rc != 0,
+			  "crt_reply_send() should fail " 
+			  "since it was aborted. rc: %d\n",
+			  rc);
+	} else {
+		D_ASSERTF(rc == 0,
+			  "crt_reply_send() failed. rc: %d\n",
+			  rc);
+	}
+
+	DBG_PRINT("tier1 test_server sent checkin reply, ret: %d, "
 		   "room_no: %d.\n", p_reply->ret, p_reply->room_no);
 }
 
@@ -247,17 +262,54 @@ client_cb_common(const struct crt_cb_info *cb_info)
 	struct test_ping_check_in	*test_ping_rpc_req_input;
 	struct test_ping_check_out	*test_ping_rpc_req_output;
 
+	struct crt_test_ping_delay_in	*rpc_req_input;
+	struct crt_test_ping_delay_out	*rpc_req_output;
+
 	struct test_swim_status_in	*swim_status_rpc_req_input;
 	struct test_swim_status_out	*swim_status_rpc_req_output;
+
+	int aborted_rank = -1;
 
 	rpc_req = cb_info->cci_rpc;
 
 	if (cb_info->cci_arg != NULL) {
+		aborted_rank = *(int *) cb_info->cci_arg;
 		/* avoid checkpatch warning */
 		*(int *) cb_info->cci_arg = 1;
 	}
 
 	switch (cb_info->cci_rpc->cr_opc) {
+	case TEST_OPC_PING_DELAY:
+		rpc_req_input = crt_req_get(rpc_req);
+		if (rpc_req_input == NULL)
+			return;
+		rpc_req_output = crt_reply_get(rpc_req);
+		if (rpc_req_output == NULL)
+			return;
+
+		if (test_g.t_issue_crt_ep_abort > -1 &&
+		    test_g.t_issue_crt_ep_abort == aborted_rank) {
+			D_ASSERT(cb_info->cci_rc == -DER_CANCELED);
+			DBG_PRINT("rpc (opc: %#x) was cancelled "
+				  " (as expected), rc: %d.\n",
+			rpc_req->cr_opc, cb_info->cci_rc);
+			sem_post(&test_g.t_token_to_proceed);
+			break;
+		}
+
+		if (cb_info->cci_rc != 0) {
+			D_ERROR("rpc (opc: %#x) failed, rc: %d.\n",
+				rpc_req->cr_opc, cb_info->cci_rc);
+			D_FREE(rpc_req_input->name);
+			break;
+		}
+		printf("%s ping result - ret: %d, room_no: %d.\n",
+		       rpc_req_input->name, rpc_req_output->ret,
+		       rpc_req_output->room_no);
+		D_FREE(rpc_req_input->name);
+		sem_post(&test_g.t_token_to_proceed);
+		break;
+
 	case TEST_OPC_CHECKIN:
 
 		test_ping_rpc_req_input = crt_req_get(rpc_req);
@@ -281,6 +333,7 @@ client_cb_common(const struct crt_cb_info *cb_info)
 		sem_post(&test_g.t_token_to_proceed);
 		D_ASSERT(test_ping_rpc_req_output->bool_val == true);
 		break;
+
 	case TEST_OPC_SWIM_STATUS:
 
 		swim_status_rpc_req_input = crt_req_get(rpc_req);
@@ -315,14 +368,14 @@ client_cb_common(const struct crt_cb_info *cb_info)
 static void
 test_shutdown_handler(crt_rpc_t *rpc_req)
 {
-	DBG_PRINT("tier1 test_srver received shutdown request, opc: %#x.\n",
+	DBG_PRINT("tier1 test_server received shutdown request, opc: %#x.\n",
 		  rpc_req->cr_opc);
 
 	D_ASSERTF(rpc_req->cr_input == NULL, "RPC request has invalid input\n");
 	D_ASSERTF(rpc_req->cr_output == NULL, "RPC request output is NULL\n");
 
 	tc_progress_stop();
-	DBG_PRINT("tier1 test_srver set shutdown flag.\n");
+	DBG_PRINT("tier1 test_server set shutdown flag.\n");
 }
 
 static struct crt_proto_rpc_format my_proto_rpc_fmt_test_group1[] = {
@@ -373,6 +426,11 @@ static struct crt_proto_rpc_format my_proto_rpc_fmt_test_group2[] = {
 		.prf_req_fmt	= &CQF_test_swim_status,
 		.prf_hdlr	= test_swim_status_handler,
 		.prf_co_ops	= NULL,
+	}, {
+		.prf_flags	= CRT_RPC_FEAT_NO_TIMEOUT,
+		.prf_req_fmt	= &CQF_crt_test_ping_delay,
+		.prf_hdlr	= test_ping_delay_handler,
+		.prf_co_ops	= NULL,
 	}
 };
 
@@ -397,8 +455,11 @@ check_in(crt_group_t *remote_group, int rank, int tag)
 	server_ep.ep_rank = rank;
 	server_ep.ep_tag = tag;
 
-	rc = crt_req_create(test_g.t_crt_ctx[0], &server_ep,
-			    TEST_OPC_CHECKIN, &rpc_req);
+	rc = crt_req_create(test_g.t_crt_ctx[0],
+			    &server_ep,
+			    TEST_OPC_CHECKIN,
+			    &rpc_req);
+
 	D_ASSERTF(rc == 0 && rpc_req != NULL, "crt_req_create() failed,"
 		  " rc: %d rpc_req: %p\n", rc, rpc_req);
 
@@ -425,15 +486,81 @@ check_in(crt_group_t *remote_group, int rank, int tag)
 		rpc_req_input->age, rpc_req_input->days,
 		rpc_req_input->bool_val);
 
-	rc = crt_req_send(rpc_req, client_cb_common, NULL);
+	test_g.global_client_cb_arg = rank;
+	rc = crt_req_send(rpc_req,
+			  client_cb_common,
+			  &test_g.global_client_cb_arg);
 	D_ASSERTF(rc == 0, "crt_req_send() failed. rc: %d\n", rc);
+}
+
+void
+check_in_with_delay(crt_group_t *remote_group, int rank, int tag)
+{
+	crt_rpc_t			*rpc_req = NULL;
+	struct crt_test_ping_delay_in	*rpc_req_input;
+	crt_endpoint_t			 server_ep = {0};
+	char				*buffer;
+	int				 rc;
+
+	server_ep.ep_grp = remote_group;
+	server_ep.ep_rank = rank;
+	server_ep.ep_tag = tag;
+
+	rc = crt_req_create(test_g.t_crt_ctx[0],
+			    &server_ep,
+			    TEST_OPC_PING_DELAY,
+			    &rpc_req);
+
+	D_ASSERTF(rc == 0 && rpc_req != NULL, "crt_req_create() failed,"
+		  " rc: %d rpc_req: %p\n", rc, rpc_req);
+
+	rpc_req_input = crt_req_get(rpc_req);
+	D_ASSERTF(rpc_req_input != NULL, "crt_req_get() failed."
+		  " rpc_req_input: %p\n", rpc_req_input);
+
+	if (D_SHOULD_FAIL(test_g.t_fault_attr_1000)) {
+		buffer = NULL;
+	} else {
+		D_ALLOC(buffer, 256);
+		D_INFO("not injecting fault.\n");
+	}
+
+	D_ASSERTF(buffer != NULL, "Cannot allocate memory.\n");
+	snprintf(buffer, 256, "Guest %d", rank);
+	rpc_req_input->name = buffer;
+	rpc_req_input->age = 21;
+	rpc_req_input->days = 7;
+	rpc_req_input->delay = 5;
+
+	/* Give the soon-to-be aborted rank some time before actually
+	 * aborting */
+	if (test_g.t_sleep_time_after_rpc != -1)
+		rpc_req_input->delay = test_g.t_sleep_time_after_rpc;
+
+	D_DEBUG(DB_TEST, "client(rank %d) sending checkin rpc with tag "
+		"%d, name: %s, age: %d, days: %d, bool_val %d.\n",
+		rank, server_ep.ep_tag, rpc_req_input->name,
+		rpc_req_input->age, rpc_req_input->days,
+		rpc_req_input->delay);
+
+	test_g.global_client_cb_arg = rank;
+	rc = crt_req_send(rpc_req,
+			  client_cb_common,
+			  &test_g.global_client_cb_arg);
+	D_ASSERTF(rc == 0, "crt_req_send() failed. rc: %d\n", rc);
+
+	/* If we're testing crt_ep_abort(), abort the specified RPC */
+	if (test_g.t_issue_crt_ep_abort == rank) {
+		rc = crt_ep_abort(&server_ep);
+		D_ASSERTF(rc == 0, "crt_ep_abort() failed. rc: %d\n", rc);
+		DBG_PRINT("crt_ep_abort called, rc = %d.\n", rc);
+	}
 
 	/*
 	 * Note: it is the responsibility of the caller of this
 	 * function to call sem_wait/sem_timewait on test semaphore
 	 * test_g.t_token_to_proceed for each call to this function.
 	 */
-
 }
 
 static struct t_swim_status
@@ -621,6 +748,9 @@ test_parse_args(int argc, char **argv)
 		{"rank", required_argument, 0, 'r'},
 		{"cfg_path", required_argument, 0, 's'},
 		{"use_cfg", required_argument, 0, 'u'},
+		{"issue_crt_ep_abort", required_argument, 0, 'i'},
+		{"sleep_time_after_rpc", required_argument, 0, 'p'},
+		{"num_checkins_to_send", required_argument, 0, 'm'},
 		{"register_swim_callback", required_argument, 0, 'w'},
 		{"verify_swim_status", required_argument, 0, 'v'},
 		{"get_swim_status", no_argument, 0, 'g'},
@@ -630,6 +760,10 @@ test_parse_args(int argc, char **argv)
 
 	test_g.cg_num_ranks = 0;
 	test_g.t_use_cfg = true;
+	test_g.t_num_checkins_to_send = 1;
+	test_g.t_issue_crt_ep_abort = -1;
+	test_g.t_sleep_time_after_rpc = -1;
+
 	test_g.t_shutdown_delay = 0;
 
 	/* SWIM testing options */
@@ -642,7 +776,7 @@ test_parse_args(int argc, char **argv)
 	struct t_swim_status vss;
 
 	while (1) {
-		rc = getopt_long(argc, argv, "n:a:c:h:u:r:", long_options,
+		rc = getopt_long(argc, argv, "n:a:c:h:u:r:m:", long_options,
 				 &option_index);
 
 		if (rc == -1)
@@ -687,6 +821,13 @@ test_parse_args(int argc, char **argv)
 		case 'u':
 			test_g.t_use_cfg = atoi(optarg);
 			break;
+		case 'm':
+			test_g.t_num_checkins_to_send = atoi(optarg);
+			break;
+		case 'i':
+			test_g.t_issue_crt_ep_abort = atoi(optarg);
+		case 'p':
+			test_g.t_sleep_time_after_rpc = atoi(optarg);
 		case 'v':
 			vss = parse_verify_swim_status_arg(optarg);
 			test_g.t_verify_swim_status.rank	= vss.rank;

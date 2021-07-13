@@ -17,6 +17,8 @@ import re
 from apricot import TestWithoutServers
 from general_utils import stop_processes
 from write_host_file import write_host_file
+from env_modules import load_mpi
+from distutils.spawn import find_executable
 
 class CartTest(TestWithoutServers):
     """Define a Cart test case."""
@@ -283,10 +285,21 @@ class CartTest(TestWithoutServers):
                   "--suppressions=../etc/memcheck-cart.supp " + \
                   "--show-reachable=yes "
 
+        load_mpi("openmpi")
+
+        openmpi_path = os.environ["PATH"]
+        openmpi_path += ":/usr/lib64/openmpi3/bin"
+        openmpi_path += ":/usr/lib64/mpi/gcc/openmpi3/bin"
+        orterun_bin = find_executable("orterun", openmpi_path)
+
+        if orterun_bin is None:
+            orterun_bin = "orterun_not_installed"
+
         _tst_bin = self.params.get("{}_bin".format(host), "/run/tests/*/")
         _tst_arg = self.params.get("{}_arg".format(host), "/run/tests/*/")
         _tst_env = self.params.get("{}_env".format(host), "/run/tests/*/")
         _tst_slt = self.params.get("{}_slt".format(host), "/run/tests/*/")
+        _tst_ppn = self.params.get("{}_ppn".format(host), "/run/tests/*/")
         _tst_ctx = "16"
         if "{}_CRT_CTX_NUM".format(host) in os.environ:
             _tst_ctx = os.environ["{}_CRT_CTX_NUM".format(host)]
@@ -297,6 +310,7 @@ class CartTest(TestWithoutServers):
         tst_env = self.get_yaml_list_elem(_tst_env, index)
         tst_slt = self.get_yaml_list_elem(_tst_slt, index)
         tst_ctx = self.get_yaml_list_elem(_tst_ctx, index)
+        tst_ppn = self.get_yaml_list_elem(_tst_ppn, index)
 
         tst_host = self.params.get("{}".format(host), "/run/hosts/*/")
         tst_ppn = self.params.get("{}_ppn".format(host), "/run/tests/*/")
