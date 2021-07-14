@@ -451,7 +451,7 @@ class DaosServer():
             self._stop_agent()
         try:
             if self.running:
-                self.stop(None)
+                self.stop(None, abort_on_warning=False)
         except NLTestTimeout:
             print('Ignoring timeout on stop')
         server_file = os.path.join(self.agent_dir, '.daos_server.active.yml')
@@ -659,7 +659,7 @@ class DaosServer():
         print('rc from agent is {}'.format(ret))
         self._agent = None
 
-    def stop(self, wf):
+    def stop(self, wf, abort_on_warning=True):
         """Stop a previously started DAOS server"""
         if self._agent:
             self._stop_agent()
@@ -740,7 +740,10 @@ class DaosServer():
         compress_file(self.control_log.name)
 
         for log in self.server_logs:
-            log_test(self.conf, log.name, leak_wf=wf)
+            log_test(self.conf,
+                     log.name,
+                     abort_on_warning=abort_on_warning,
+                     leak_wf=wf)
         self.running = False
         return ret
 
@@ -2179,6 +2182,7 @@ def log_test(conf,
              fi_signal=None,
              leak_wf=None,
              check_read=False,
+             abort_on_warning=True,
              check_write=False):
     """Run the log checker on filename, logging to stdout"""
 
@@ -2202,7 +2206,7 @@ def log_test(conf,
         wf_list.append(leak_wf)
 
     try:
-        lto.check_log_file(abort_on_warning=True,
+        lto.check_log_file(abort_on_warning=abort_on_warning,
                            show_memleaks=show_memleaks,
                            leak_wf=leak_wf)
     except lt.LogCheckError:
@@ -2773,6 +2777,68 @@ def test_pydaos_kv(server, conf):
     daos._cleanup()
     log_test(conf, pydaos_log_file.name)
 
+def run_daos_test(server, conf):
+    """Run the daos_test program to check for errors
+
+    Note that this doesn't check the result of daos_test itself, but
+    so far simply checks the logs for generated errors.
+    """
+
+    env = get_base_env()
+    env['DAOS_AGENT_DRPC_DIR'] = server.agent_dir
+    env['POOL_SCM_SIZE'] = '1'
+    env['POOL_NVME_SIZE'] = '0'
+    env['OMPI_MCA_btl'] = 'self,tcp'
+    env['OMPI_MCA_oob'] = '^ud,ucx'
+    env['OMPI_MCA_pml'] = '^ucx'
+    log_file = tempfile.NamedTemporaryFile(prefix='dnt_test_',
+                                           suffix='.log',
+                                           delete=False)
+    env['D_LOG_FILE'] = log_file.name
+
+    daos_test_bin = os.path.join(conf['PREFIX'], 'bin', 'daos_test')
+
+    rc = subprocess.run([daos_test_bin, '--help'],
+                        env=env,
+                        stdout=subprocess.PIPE,
+                        check=False)
+    print(rc)
+    assert rc.returncode == 0
+    log_test(conf, log_file.name)
+
+    modes = []
+
+    for line in rc.stdout.decode('utf-8').splitlines():
+        if line.startswith('Default'):
+            break
+        if not line.startswith('daos_test '):
+            continue
+        _, mode = line.split('|')
+        if mode == '--all':
+            continue
+        modes.append(mode)
+
+    print(modes)
+
+    for mode in modes:
+
+        log_file = tempfile.NamedTemporaryFile(prefix='dnt_test_',
+                                               suffix='.log',
+                                               delete=False)
+
+        env['D_LOG_FILE'] = log_file.name
+        env['PATH'] = '{}:{}'.format(os.path.join(conf['PREFIX'], 'bin'),
+                                     env['PATH'])
+
+        cmd = [daos_test_bin, mode]
+        rc = subprocess.run(cmd, env=env, stdout=subprocess.PIPE, check=False)
+        stdout = rc.stdout.decode('utf-8')
+        print(rc)
+        log_test(conf, log_file.name, abort_on_warning=False)
+        assert 'Unknown Option' not in stdout
+        if mode == '--degrade_ec':
+            return
+
 # Fault injection testing.
 #
 # This runs two different commands under fault injection, although it allows
@@ -3209,10 +3275,14 @@ def main():
     server.start()
 
     fatal_errors = BoolRatchet()
+    server_log_strict = True
     fi_test = False
 
     if args.mode == 'launch':
         run_in_fg(server, conf)
+    elif args.mode == 'daos_test':
+        run_daos_test(server, conf)
+        server_log_strict = False
     elif args.mode == 'il':
         fatal_errors.add_result(run_il_test(server, conf))
     elif args.mode == 'kv':
@@ -3234,14 +3304,19 @@ def main():
     elif args.test == 'all':
         fatal_errors.add_result(run_posix_tests(server, conf))
     elif args.test:
-        fatal_errors.add_result(run_posix_tests(server, conf, args.test))
-    else:
-        fatal_errors.add_result(run_posix_tests(server, conf))
+        if args.test == 'all':
+            fatal_errors.add_result(run_posix_tests(server, conf))
+        else:
+            fatal_errors.add_result(run_posix_tests(server, conf, args.test))
+    elif not args.mode:
         fatal_errors.add_result(run_il_test(server, conf))
         fatal_errors.add_result(run_dfuse(server, conf))
         fatal_errors.add_result(set_server_fi(server))
+    else:
+        print("Unknown mode")
+        fatal_errors.add_result(True)
 
-    if server.stop(wf_server) != 0:
+    if server.stop(wf_server, abort_on_warning=server_log_strict) != 0:
         fatal_errors.fail()
 
     if args.mode == 'all':

@@ -20,7 +20,7 @@ cmd_free_args(char **args, int argcount)
 	int i;
 
 	for (i = 0; i < argcount; i++)
-		D_FREE(args[i]);
+		free(args[i]);
 
 	D_FREE(args);
 }
@@ -151,7 +151,7 @@ daos_dmg_json_pipe(const char *dmg_cmd, const char *dmg_config_file,
 				D_GOTO(out_jbuf, rc = -DER_REC2BIG);
 			}
 
-			D_REALLOC(temp, jbuf, total, size);
+			D_REALLOC(temp, jbuf, 0, size);
 			if (temp == NULL)
 				D_GOTO(out_jbuf, rc = -DER_NOMEM);
 			jbuf = temp;
@@ -164,7 +164,7 @@ daos_dmg_json_pipe(const char *dmg_cmd, const char *dmg_config_file,
 		total += n;
 	}
 
-	D_REALLOC(temp, jbuf, total, total + 1);
+	D_REALLOC(temp, jbuf, 0, total + 1);
 	if (temp == NULL)
 		D_GOTO(out_jbuf, rc = -DER_NOMEM);
 	jbuf = temp;
@@ -178,10 +178,9 @@ daos_dmg_json_pipe(const char *dmg_cmd, const char *dmg_config_file,
 	if (obj == NULL) {
 		enum json_tokener_error jerr = json_tokener_get_error(tok);
 		int fail_off = json_tokener_get_parse_end(tok);
-		char *aterr = &jbuf[fail_off];
 
-		D_ERROR("failed to parse JSON at offset %d: %s %c\n",
-			fail_off, json_tokener_error_desc(jerr), aterr[0]);
+		D_ERROR("failed to parse JSON at offset %d: %s\n",
+			fail_off, json_tokener_error_desc(jerr));
 		D_GOTO(out_tokener, rc = -DER_INVAL);
 	}
 
