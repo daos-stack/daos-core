@@ -1810,14 +1810,13 @@ dc_array_io(daos_handle_t array_oh, daos_handle_t th,
 	return 0;
 
 err_iotask:
+	if (head && !head_cb_registered)
+		rc = tse_task_register_comp_cb(task, free_io_params_cb, &head, sizeof(head));
 	tse_task_list_abort(&io_task_list, rc);
 err_stask:
 	if (op_type == DAOS_OPC_ARRAY_READ && array->byte_array)
 		tse_task_complete(stask, rc);
 err_task:
-	if (head && !head_cb_registered)
-		tse_task_register_comp_cb(task, free_io_params_cb, &head,
-					  sizeof(head));
 	if (array)
 		array_decref(array);
 	tse_task_complete(task, rc);
